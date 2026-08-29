@@ -1,0 +1,50 @@
+expected_output = {
+    'egress_queue_profile': {
+        'device': 0,
+        'oid': '0x1EB',
+        'priority_queues': 1,
+        'profile_id': '0x5',
+        'ref_count': 3,
+        'total_queues': 3,
+        'traffic_class_to_queue_map': {
+            0: 0,
+            1: 0,
+            2: 0,
+            3: 0,
+            4: 0,
+            5: 0,
+            6: 6,
+            7: 7,
+        },
+    },
+    'interface': {
+        'GigabitEthernet2/0/2': {
+            'cgid': '0x383810',
+            'filter_state': 'UP TO DATE',
+            'no_of_classes': 3,
+            'tcg_ref_count': 3,
+            'vmr_state': 'DIRTY',
+        },
+    },
+    'interface_bind': {
+        'port_oid': '0x792',
+        'port_type': 'L3',
+        'scheduler': {
+            'asic': 'Argon',
+            'oid': '0x797',
+            'programmable': False,
+        },
+        'speed': 1000000000,
+        'state': 'Active',
+        'system_port_oid': '0x796',
+        'voq_set': {
+            'base_voq_id': 472,
+            'device': 0,
+            'empty': False,
+            'flush': 'Flush not active',
+            'oid': '0x794',
+            'size': 8,
+            'state': 'Active',
+        },
+    },
+}

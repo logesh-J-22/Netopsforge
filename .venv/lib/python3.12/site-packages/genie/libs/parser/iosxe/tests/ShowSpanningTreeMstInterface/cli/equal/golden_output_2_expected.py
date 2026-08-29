@@ -1,0 +1,30 @@
+expected_output = {
+    'boundary': 'internal',
+    'bpdu_filter': 'disable',
+    'bpdu_guard': 'disable',
+    'bpdu_received': 0,
+    'bpdu_sent': 692,
+    'edge_port': 'no',
+    'instances': {
+        0: {
+            'cost': 2000,
+            'priority': '128.1206',
+            'role': 'Desg',
+            'status': 'FWD',
+            'vlans_mapped': ['1-9', '21-29', '41-4094'],
+        },
+        4: {
+            'cost': 2000,
+            'priority': '128.1206',
+            'role': 'Desg',
+            'status': 'FWD',
+            'vlans_mapped': ['30-40'],
+        },
+    },
+    'interface': 'FiftyGigE8/0/30',
+    'link_type': 'point-to-point',
+    'mst_id': 0,
+    'port_guard': 'none',
+    'role': 'designated',
+    'status': 'forwarding',
+}

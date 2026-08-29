@@ -1,0 +1,9 @@
+all:
+  children:
+    cisco:  
+      children:
+        ciscoIOS:
+            hosts:
+              R1:
+                
+                

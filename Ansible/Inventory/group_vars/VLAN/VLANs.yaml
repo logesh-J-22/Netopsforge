@@ -1,0 +1,10 @@
+VLANS:
+  R1:
+    - id: 10
+      name: Devops
+    - id: 20
+      name: Security
+    - id: 30
+      name: Netops
+    - id: 40
+      name: Tech

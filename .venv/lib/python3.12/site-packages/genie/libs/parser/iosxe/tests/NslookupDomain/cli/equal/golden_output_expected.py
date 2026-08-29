@@ -1,0 +1,22 @@
+expected_output = {
+    "address":"64.104.128.236",
+    "fqdn":[
+        {
+            "domain":"www.cisco.com",
+            "cname":"origin-www.cisco.com."
+        },
+        {
+            "domain":"origin-www.cisco.com",
+            "cname":"origin-www.xgslb-v3.cisco.com."
+        }
+    ],
+    "name":{
+        "origin-www.xgslb-v3.cisco.com":{
+            "addresses":[
+                "173.37.145.84",
+                "2001:420:1201:2::a"
+            ]
+        }
+    },
+    "server":"64.104.128.236"
+    }

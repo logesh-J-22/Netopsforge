@@ -1,0 +1,52 @@
+expected_output = {
+    'power_stack': {
+        'Powerstack-Ring': {
+            'mode': 'SP-PS',
+            'topology': 'Ring',
+            'total_power': 8850,
+            'reserved_power': 30,
+            'allocated_power': 1076,
+            'unused_power': 7744,
+            'switch_num': 3,
+            'power_supply_num': 9,
+            'switches': {
+                1: {
+                    'power_supply_a': 850,
+                    'power_supply_b': 1600,
+                    'power_supply_c': 500,
+                    'power_budget': 1700,
+                    'allocated_power': 273.0,
+                    'available_power': 1427.0,
+                    'consumed_power_sys': 85.0,
+                    'consumed_power_poe': 7.9,
+                },
+                2: {
+                    'power_supply_a': 500,
+                    'power_supply_b': 850,
+                    'power_supply_c': 850,
+                    'power_budget': 1730,
+                    'allocated_power': 317.0,
+                    'available_power': 1413.0,
+                    'consumed_power_sys': 88.0,
+                    'consumed_power_poe': 14.3,
+                },
+                3: {
+                    'power_supply_a': 500,
+                    'power_supply_b': 1600,
+                    'power_supply_c': 1600,
+                    'power_budget': 4800,
+                    'allocated_power': 486.0,
+                    'available_power': 4314.0,
+                    'consumed_power_sys': 165.0,
+                    'consumed_power_poe': 2.7,
+                },
+            },
+        },
+    },
+    'totals': {
+        'total_allocated_power': 1076.0,
+        'total_available_power': 7154.0,
+        'total_consumed_power_sys': 338.0,
+        'total_consumed_power_poe': 24.9,
+    },
+}

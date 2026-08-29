@@ -1,0 +1,6 @@
+{
+    "rloc_vrf": "default",
+    "instance_id": 4,
+    "address_family": "named-services",
+    "prefix": "internet"
+}

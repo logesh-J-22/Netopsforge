@@ -1,0 +1,12 @@
+- name: test playbook executiom
+  hosts: ciscoIOS
+  gather_facts: false
+  tasks:
+    - name: get the inerface info
+      cisco.ios.ios_command:
+        commands:
+          - "show ip interface brief"
+      register: output
+    - name: Display output
+      ansible.builtin.debug:
+        var: output

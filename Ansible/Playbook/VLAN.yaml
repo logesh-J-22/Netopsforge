@@ -1,0 +1,51 @@
+- name: Create VLAN's and add interfaces to interfaces
+  hosts: ciscoIOS
+  gather_facts: false
+  tasks:
+    - name: Include the VLAN variables
+      ansible.builtin.include_vars:
+        dir: "{{ inventory_dir }}/group_vars/VLAN"
+    - name: Create VLAN's
+      cisco.ios.ios_vlans:
+        config:
+          - name: "{{ item.name }}"
+            vlan_id: "{{ item.id }}"
+        state: merged
+      loop: "{{ VLANS[inventory_hostname] }}"
+    - name: Add interface to the VLAN that are in access mode
+      cisco.ios.ios_l2_interfaces:
+        config:
+          - name: "{{ item.name }}"
+            mode: "{{ item.mode }}"
+            access:
+              vlan: "{{ item.access_vlan }}"
+        state: merged
+      loop: "{{ interfaces[inventory_hostname] }}"
+      when: item.mode == "access"
+    - name: Add interface to the VLAN that are in trunk mode
+      cisco.ios.ios_l2_interfaces:
+        config:
+          - name: "{{ item.name }}"
+            mode: "{{ item.mode }}"
+            trunk:
+              native_vlan: "{{ item.native_vlan }}"
+              allowed_vlans: "{{ item.allowed_vlans }}"
+        state: merged
+      loop: "{{ interfaces[inventory_hostname] }}"
+      when: item.mode != "access"
+    - name: Add interface description
+      cisco.ios.ios_interfaces:
+        config:
+          - name: "{{ item.name }}"
+            description: "{{ item.description }}"
+        state: merged
+      loop: "{{ interfaces[inventory_hostname] }}"
+    - name: Display the VLAN info
+      ansible.utils.cli_parse:
+        command: show vlan brief
+        parser:
+          name: ansible.netcommon.ntc_templates
+        set_fact: VLAN_details
+    - name: Display the VLAN brief info
+      ansible.builtin.debug:
+        var: VLAN_details

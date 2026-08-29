@@ -1,0 +1,28 @@
+expected_output = {
+    "autoconfig_status": "Enable",
+    "ipv4": {
+        "configured_interface": "Vlan1",
+        "config_in_progress": False,
+        "gw_ip": "192.0.2.1",
+        "gw_mac": "aa00.bbcc.ddee",
+        "interface": "Vlan92",
+        "ip_address": "192.0.2.181/255.255.255.0",
+        "port_used": "GigabitEthernet1/0/2",
+        "score": 3,
+        "svi": "Configured",
+        "type": "DHCP",
+    },
+    "ipv6": {
+        "configured_interface": "Vlan1",
+        "config_in_progress": False,
+        "gw_ip": "fe80::1",
+        "gw_mac": "aa00.bbcc.ddee",
+        "interface": "Vlan92",
+        "ip_address": "2001:db8:92::1/64",
+        "port_used": "GigabitEthernet1/0/2",
+        "score": 0,
+        "svi": "Configured",
+        "type": "SLAAC",
+    },
+    "uplink_reachable": "IPv4",
+}

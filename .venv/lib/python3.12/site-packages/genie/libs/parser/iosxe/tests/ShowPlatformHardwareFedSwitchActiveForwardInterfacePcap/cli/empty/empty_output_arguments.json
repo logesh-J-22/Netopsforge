@@ -1,0 +1,6 @@
+{
+    "interface": "FiftyGigE1/0/67",
+    "pcap_path": "flash:/vlan_pkt.pcap",
+    "number": "1",
+    "flowid": "FL1"
+}

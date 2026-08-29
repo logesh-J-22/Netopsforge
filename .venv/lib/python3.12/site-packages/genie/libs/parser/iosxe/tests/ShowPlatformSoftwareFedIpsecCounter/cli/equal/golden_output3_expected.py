@@ -1,0 +1,32 @@
+expected_output = {
+    'if-id': '0x5c',
+    'inbound_flow': {
+        'anti_replay_fail': 0,
+        'asic_instance': 'SA Stats',
+        'auth_fail': 0,
+        'byte_count': 20802622,
+        'flow_id': 11,
+        'fvrf_id': 0,
+        'invalid_sa': 0,
+        'ivrf_id': 0,
+        'packet_count': 20019,
+        'packet_format_check_error': 0,
+        'sa_index': 1,
+        'sequence_number_overflows': 0,
+    },
+    'outbound_flow': {
+        'anti_replay_fail': 0,
+        'asic_instance': 'SA Stats',
+        'auth_fail': 0,
+        'byte_count': 21323230,
+        'flow_id': 12,
+        'fvrf_id': 0,
+        'invalid_sa': 0,
+        'ivrf_id': 0,
+        'packet_count': 20019,
+        'packet_format_check_error': 0,
+        'sa_index': 1026,
+        'sequence_number_overflows': 0,
+    },
+}
+

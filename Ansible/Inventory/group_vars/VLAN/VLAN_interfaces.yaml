@@ -1,0 +1,25 @@
+interfaces: 
+  R1:
+    - name: GigabitEthernet3/0/1
+      description: "Connected to PC1"
+      mode: access
+      access_vlan: 10
+      enable: true
+    - name: GigabitEthernet3/0/2
+      description: "Connected to PC2"
+      mode: access
+      access_vlan: 20
+      enable: true
+    - name: GigabitEthernet3/0/3
+      description: "Connected to PC3"
+      mode: access
+      access_vlan: 300000
+      enable: true
+    - name: GigabitEthernet3/0/4
+      description: "Uplink Connected to SW2"
+      mode: trunk
+      allowed_vlans:
+        - 10
+        - 20
+      native_vlan: 1 
+      enable: true
