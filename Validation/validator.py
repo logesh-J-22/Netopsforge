@@ -27,6 +27,7 @@ def get_device_list_from_INVENTORY():
                     "password": variables.get("ansible_password")
                 }
             )
+    # print(router_list)
     return router_list
     
     
@@ -52,19 +53,38 @@ def Required_device_details():
             item["vlan_id"]: {item["vlan_name"]:item["interfaces"]}
             for item in device_vlan_details
         }
+        # pprint(device_interfaces) # has the interfaces in the router
+        # pprint(device_VLAN_and_interface_detail) # vlans and the respective interfaces that are configured in it.
         return device_interfaces, device_VLAN_and_interface_detail
         
 
 
 def vlan_exist(device_VLAN_and_interface_detail):
     VLAN_YAML_Contents=load_yaml(INVENTORY_VLAN)
-    pprint(VLAN_YAML_Contents)
+    # pprint(VLAN_YAML_Contents)
+    existing_VLAN=[]
+    for router in VLAN_YAML_Contents['VLANS'].values():
+        for vlan in router:
+                # print(str(vlan['id']))
+                if str(vlan['id']) in list(VLAN_YAML_Contents['VLANS'].values())[0]:
+                    
+                    existing_VLAN.append(vlan)
+                    continue
+                else: 
+                    print(f"{vlan['id']} is not yet created")
+                    print(f"{vlan['id']} is getting skipped without being exceuted....")
+    print(existing_VLAN)
+   
+    # print(VLAN_YAML_Contents['VLANS'].keys())
+    
+    
 
 
 
 def main():
     device_interfaces, device_VLAN_and_interface_detail=Required_device_details()
     vlan_exist(device_VLAN_and_interface_detail)
+    
 
 if __name__=="__main__":
     main()

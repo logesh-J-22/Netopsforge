@@ -81,7 +81,9 @@ def check_and_update(router_dir,current_config):
 
 def main():
     Inventory=get_inventory()
+    # print(Inventory)
     routers=get_routers(Inventory)
+    # print(routers)
     for router in routers:
         backup(router)
 

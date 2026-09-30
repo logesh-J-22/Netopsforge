@@ -13,13 +13,13 @@ interfaces:
     - name: GigabitEthernet3/0/3
       description: "Connected to PC3"
       mode: access
-      access_vlan: 300000
+      access_vlan: 300
       enable: true
     - name: GigabitEthernet3/0/4
       description: "Uplink Connected to SW2"
       mode: trunk
       allowed_vlans:
         - 10
-        - 20
+        - 200
       native_vlan: 1 
       enable: true
