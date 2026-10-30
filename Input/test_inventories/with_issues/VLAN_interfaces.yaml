@@ -1,0 +1,55 @@
+# ==============================================================================
+# VLAN Interfaces Inventory (With Issues)
+# Designed for testing validation checks in VLAN_and_Interface_validation.py
+# ==============================================================================
+
+interfaces:
+  R1:
+    # Interface physically missing from switch hardware -> Generates ERROR
+    - name: GigabitEthernet3/0/1
+      description: "Non-existent access port"
+      mode: access
+      access_vlan: 10
+      enable: true
+
+    # Trunk interface physically missing from switch hardware -> Generates ERROR
+    - name: GigabitEthernet3/0/4
+      description: "Non-existent trunk port"
+      mode: trunk
+      allowed_vlans:
+        - 10
+        - 20
+      native_vlan: 999
+      enable: true
+
+    # Native VLAN is not 999 (set to 1) -> Generates ERROR
+    - name: GigabitEthernet1/0/1
+      description: "Trunk with invalid native VLAN"
+      mode: trunk
+      allowed_vlans:
+        - 10
+        - 20
+      native_vlan: 1
+      enable: true
+
+    # Access VLAN 9999 neither exists on switch nor in VLAN inventory -> Generates ERROR
+    - name: GigabitEthernet1/0/2
+      description: "Port referencing ghost VLAN"
+      mode: access
+      access_vlan: 9999
+      enable: true
+
+  R2:
+    # Port is currently in VLAN 1 on the switch, to be moved to access VLAN 10 -> Generates WARNING
+    - name: GigabitEthernet1/0/3
+      description: "Port on VLAN 1 to be moved to access VLAN 10"
+      mode: access
+      access_vlan: 10
+      enable: true
+
+    # Interface physically missing from R2 switch hardware -> Generates ERROR
+    - name: GigabitEthernet2/0/2
+      description: "Non-existent port on R2"
+      mode: access
+      access_vlan: 10
+      enable: true

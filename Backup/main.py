@@ -4,6 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import json
 import difflib
+from pprint import pprint
 
 INVENTORY=Path(__file__).resolve().parent.parent.joinpath("Ansible/Inventory/Inventory.yaml")
 Backup_dir=Path(__file__).resolve().parent.parent.joinpath("Backup_files")
@@ -51,19 +52,26 @@ def backup(router):
     router_dir=Backup_dir / router["hostname"]
     router_dir.mkdir(parents=True,exist_ok=True)
     diff=check_and_update(router_dir,running_config)
-    if diff:
+    if diff is None:
+        backup_file=router_dir / f"{timestamp}.cfg"
+        backup_file.write_text(running_config)
+        print(f"Backup file for {router['hostname']} saved successfully under {backup_file}!!!!")
+    elif diff:
         print(f"Config has changed for {router["hostname"]}")
         print("\n".join(diff))
         backup_file=router_dir / f"{timestamp}.cfg"
         backup_file.write_text(running_config)
-        print(f"Backup file for {router["hostname"]} saved successfully under {backup_file}!!!!")
+        print(f"Backup file for {router['hostname']} saved successfully under {backup_file}!!!!")
     else:
-        print(f"Config has not changed for {router["hostname"]}")
+        print(f"Config has not changed for {router['hostname']} since the last backup. No new backup file created.")
 
 
 
 def check_and_update(router_dir,current_config):
+    
     files= [f for f in router_dir.iterdir() if f.is_file()]
+    if files==[]:
+        return None
     latest_file=max(files,key=lambda f: f.stat().st_ctime)
     with open(latest_file) as file:
         previous_config=file.read()
@@ -75,15 +83,18 @@ def check_and_update(router_dir,current_config):
         lineterm=""
     ))
     return diff
-    
+   
+        
 
 
 
 def main():
     Inventory=get_inventory()
+    pprint(Inventory)
     routers=get_routers(Inventory)
-    for router in routers:
-        backup(router)
+    pprint(routers)
+    # for router in routers:
+    #     backup(router)
 
 if __name__=="__main__":
     main()

@@ -4,14 +4,14 @@
   tasks:
     - name: Include the VLAN variables
       ansible.builtin.include_vars:
-        dir: "{{ inventory_dir }}/group_vars/VLAN"
+        dir: "{{ vlan_dir | default(playbook_dir ~ '/../../Input/VLAN') }}"
     - name: Create VLAN's
       cisco.ios.ios_vlans:
         config:
           - name: "{{ item.name }}"
             vlan_id: "{{ item.id }}"
         state: merged
-      loop: "{{ VLANS[inventory_hostname] }}"
+      loop: "{{ VLANS[inventory_hostname] | default([]) }}"
     - name: Add interface to the VLAN that are in access mode
       cisco.ios.ios_l2_interfaces:
         config:
@@ -20,7 +20,7 @@
             access:
               vlan: "{{ item.access_vlan }}"
         state: merged
-      loop: "{{ interfaces[inventory_hostname] }}"
+      loop: "{{ interfaces[inventory_hostname] | default([]) | expand_interfaces }}"
       when: item.mode == "access"
     - name: Add interface to the VLAN that are in trunk mode
       cisco.ios.ios_l2_interfaces:
@@ -28,18 +28,19 @@
           - name: "{{ item.name }}"
             mode: "{{ item.mode }}"
             trunk:
-              native_vlan: "{{ item.native_vlan }}"
-              allowed_vlans: "{{ item.allowed_vlans }}"
+              native_vlan: "{{ item.native_vlan | default(omit) }}"
+              allowed_vlans: "{{ item.allowed_vlans | default(omit) }}"
         state: merged
-      loop: "{{ interfaces[inventory_hostname] }}"
-      when: item.mode != "access"
+      loop: "{{ interfaces[inventory_hostname] | default([]) | expand_interfaces }}"
+      when: item.mode == "trunk"
     - name: Add interface description
       cisco.ios.ios_interfaces:
         config:
           - name: "{{ item.name }}"
             description: "{{ item.description }}"
+            enabled: "{{ item.enable | default(true) }}"
         state: merged
-      loop: "{{ interfaces[inventory_hostname] }}"
+      loop: "{{ interfaces[inventory_hostname] | default([]) | expand_interfaces }}"
     - name: Display the VLAN info
       ansible.utils.cli_parse:
         command: show vlan brief

@@ -5,5 +5,6 @@ all:
         ciscoIOS:
             hosts:
               R1:
+              R2:
                 
                 

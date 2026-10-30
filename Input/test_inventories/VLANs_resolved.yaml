@@ -1,0 +1,32 @@
+# ==============================================================================
+# VLAN Inventory (Resolved)
+# All errors and conflicts have been resolved by the user:
+# 1. Duplicate IDs removed: All VLAN IDs are unique per device.
+# 2. Duplicate Names removed: All VLAN names are unique per device.
+# 3. Name Conflicts resolved: VLAN 20 is named 'Security', avoiding conflict
+#    with 'Miser' (VLAN 201) and 'Black' (VLAN 202).
+# 4. Result: Produces only OK (for matching existing VLANs) and CHANGE (for new VLANs).
+# ==============================================================================
+
+VLANS:
+  R1:
+    # Existing VLAN on R1 with matching name -> Generates OK
+    - id: 10
+      name: Devops
+
+    # New unique VLANs to create on R1 -> Generates CHANGE
+    - id: 20
+      name: Security
+    - id: 30
+      name: Netops
+
+  R2:
+    # Existing VLAN on R2 with matching name ('VLAN0010') -> Generates OK
+    - id: 10
+      name: VLAN0010
+
+    # New unique VLANs to create on R2 -> Generates CHANGE
+    - id: 20
+      name: Security
+    - id: 30
+      name: Netops

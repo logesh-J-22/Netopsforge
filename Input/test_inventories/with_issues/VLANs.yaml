@@ -1,0 +1,45 @@
+# ==============================================================================
+# VLAN Inventory (With Issues)
+# Designed for testing validation checks in VLAN_and_Interface_validation.py
+# ==============================================================================
+
+VLANS:
+  R1:
+    # Existing matching VLAN -> Generates OK
+    - id: 10
+      name: Devops
+
+    # Duplicate VLAN ID 30 on R1 -> Generates ERROR
+    - id: 30
+      name: Netops
+    - id: 30
+      name: Netgear
+
+    # Duplicate VLAN Name 'Technician' across different IDs -> Generates ERROR
+    - id: 40
+      name: Technician
+    - id: 50
+      name: Technician
+
+    # Name Conflict: VLAN 201 is already named 'Miser' on R1 switch -> Generates CONFLICT
+    - id: 20
+      name: Miser
+
+    # New VLAN to be created -> Generates CHANGE
+    - id: 60
+      name: Security
+
+  R2:
+    # Duplicate VLAN ID 10 on R2 -> Generates ERROR
+    - id: 10
+      name: Management
+    - id: 10
+      name: Operations
+
+    # Name Conflict: VLAN 202 is already named 'Black' on R2 switch -> Generates CONFLICT
+    - id: 20
+      name: Black
+
+    # New VLAN to be created -> Generates CHANGE
+    - id: 70
+      name: Storage

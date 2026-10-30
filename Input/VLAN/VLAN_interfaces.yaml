@@ -1,0 +1,66 @@
+# User requested to give native VLAN to 999 to the interfaces that are in trunk mode.
+
+
+interfaces: 
+  R1:
+    - name: GigabitEthernet3/0/1,GigabitEthernet3/0/10,GigabitEthernet3/0/11
+      description: "Connected to PC1"
+      mode: access
+      access_vlan: 10
+      enable: true
+    - name: GigabitEthernet3/0/2
+      description: "Connected to PC2"
+      mode: access
+      access_vlan: 20
+      enable: true
+    - name: GigabitEthernet3/0/3
+      description: "Connected to PC3"
+      mode: access
+      access_vlan: 300000
+      enable: true
+    - name: GigabitEthernet3/0/4
+      description: "Uplink Connected to SW2"
+      mode: trunk
+      allowed_vlans:
+        - 10
+        - 20
+      native_vlan: 1 
+      enable: true
+    - name: GigabitEthernet3/0/5
+      description: "Uplink Connected to SW3"
+      mode: trunk
+      allowed_vlans:
+        - 10
+      native_vlan: 1 
+      enable: true
+    - name: GigabitEthernet3/0/6
+      description: "Uplink Connected to SW4"
+      mode: trunk
+      allowed_vlans:
+        - 55
+      native_vlan: 1 
+      enable: true
+  R2:
+    - name: GigabitEthernet1/0/3
+      description: "Connected to PC1"
+      mode: access
+      access_vlan: 10
+      enable: true
+    - name: GigabitEthernet2/0/2
+      description: "Connected to PC2"
+      mode: access
+      access_vlan: 20
+      enable: true
+    - name: GigabitEthernet3/0/3
+      description: "Connected to PC3"
+      mode: access
+      access_vlan: 300000
+      enable: true
+    - name: GigabitEthernet3/0/4
+      description: "Uplink Connected to SW2"
+      mode: trunk
+      allowed_vlans:
+        - 10
+        - 20
+      native_vlan: 1 
+      enable: true

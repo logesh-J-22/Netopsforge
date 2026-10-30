@@ -1,0 +1,27 @@
+# ==============================================================================
+# VLAN Inventory (Resolved)
+# All errors and conflicts have been resolved by the user
+# ==============================================================================
+
+VLANS:
+  R1:
+    # Existing VLAN on R1 with matching name -> Generates OK
+    - id: 10
+      name: Devops
+
+    # New unique VLANs to create on R1 -> Generates CHANGE
+    - id: 20
+      name: Security
+    - id: 30
+      name: Netops
+
+  R2:
+    # Existing VLAN on R2 with matching name ('VLAN0010') -> Generates OK
+    - id: 10
+      name: VLAN0010
+
+    # New unique VLANs to create on R2 -> Generates CHANGE
+    - id: 20
+      name: Security
+    - id: 30
+      name: Netops

@@ -1,0 +1,66 @@
+# ==============================================================================
+# VLAN Interfaces Inventory (Resolved)
+# All errors and conflicts have been resolved by the user:
+# 1. Non-existent ports removed: All interfaces exist in switch hardware (Gi1/0/1 - Gi1/0/7).
+# 2. Native VLAN corrected: Set to 999 for all trunk interfaces.
+# 3. Valid VLAN references: All access and allowed VLANs exist on device or in VLAN inventory.
+# 4. Warnings and Changes preserved:
+#    - Gi1/0/3 is currently on VLAN 1; moving it to access VLAN 10 -> Generates WARNING + CLI command.
+#    - Gi1/0/1 is an active trunk allowing VLAN 20; adding VLAN 10 & native 999 -> Generates CHANGE + CLI commands.
+#    - Gi1/0/4 is converted to trunk with allowed VLANs 10, 30 & native 999 -> Generates CHANGE + CLI commands.
+#    - Gi1/0/7 is already matching access VLAN 3071 -> Generates OK.
+# ==============================================================================
+
+interfaces:
+  R1:
+    # Existing trunk port: currently allows VLAN 20; adding VLAN 10 & native 999 -> Generates CHANGE
+    - name: GigabitEthernet1/0/1
+      description: "Uplink trunk to Core Switch"
+      mode: trunk
+      allowed_vlans:
+        - 10
+        - 20
+      native_vlan: 999
+      enable: true
+
+    # Existing access port: currently on VLAN 1, moving to VLAN 10 -> Generates WARNING
+    - name: GigabitEthernet1/0/3
+      description: "Workstation port"
+      mode: access
+      access_vlan: 10
+      enable: true
+
+    # Existing port: converting from access to trunk mode with VLANs 10, 30 & native 999 -> Generates CHANGE
+    - name: GigabitEthernet1/0/4
+      description: "Distribution trunk port"
+      mode: trunk
+      allowed_vlans:
+        - 10
+        - 30
+      native_vlan: 999
+      enable: true
+
+    # Existing access port: already matches VLAN 3071 on switch -> Generates OK
+    - name: GigabitEthernet1/0/7
+      description: "Management access port"
+      mode: access
+      access_vlan: 3071
+      enable: true
+
+  R2:
+    # Existing trunk port: adding VLAN 10 & native 999 -> Generates CHANGE
+    - name: GigabitEthernet1/0/1
+      description: "Uplink trunk to Core Switch"
+      mode: trunk
+      allowed_vlans:
+        - 10
+        - 20
+      native_vlan: 999
+      enable: true
+
+    # Existing access port: currently on VLAN 1, moving to VLAN 10 -> Generates WARNING
+    - name: GigabitEthernet1/0/3
+      description: "Workstation port"
+      mode: access
+      access_vlan: 10
+      enable: true
