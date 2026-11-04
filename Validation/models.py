@@ -6,6 +6,14 @@ from exception import InvalidVLANError, ReservedVLANError
 class Vlan_structure(BaseModel):
         id: int
         name: str
+        @field_validator("id")
+        @classmethod
+        def validate_vlan_id(cls, vlan: int):
+            if 1002 <= vlan <= 1005:
+                raise ReservedVLANError("VLANs 1002 to 1005 are reserved for legacy purposre please use other VLANs")
+            elif not (1 <= vlan <= 4094):
+                raise InvalidVLANError(f"{vlan} is a invlaid VLAN and it's not in the range 1-4094")
+            return vlan
 
 class Vlan_modes(str,Enum):
     ACCESS= "access"
@@ -22,18 +30,19 @@ class Vlan_interface_structure(BaseModel):
 
     
 
-    @field_validator("access_vlan","allowed_vlans")
+    @field_validator("access_vlan", "allowed_vlans")
     @classmethod
     def validate_vlan_range(cls, value):
-        vlans= value if isinstance(value,list) else [value]
+        if value is None:
+            return value
+        vlans = value if isinstance(value, list) else [value]
         for vlan in vlans:
-            if vlan !=None:
-                if vlan>=1002 and vlan<=1005:
+            if vlan is not None:
+                if 1002 <= vlan <= 1005:
                     raise ReservedVLANError("VLANs 1002 to 1005 are reserved for legacy purposre please use other VLANs")
-                elif vlan>=1 and vlan<=4094:
-                    return vlan
-                else:
+                elif not (1 <= vlan <= 4094):
                     raise InvalidVLANError(f"{vlan} is a invlaid VLAN and it's not in the range 1-4094")
+        return value
         
     @model_validator(mode="after")
     def validate_mode_fields(self):

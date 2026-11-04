@@ -1,13 +1,15 @@
 from pathlib import Path
-from orchestrator import load_yaml
 from pprint import pprint
 from netmiko import Netmiko
 import subprocess
 import json
+import yaml
 
-INVENTORY_VALIDATOR=Path(__file__).resolve().parent.parent.joinpath("Ansible/Inventory/Inventory.yaml")
-INVENTORY_VLAN=Path(__file__).resolve().parent.parent.joinpath("Input/VLAN/VLANs.yaml")
-INVENTORY_VLAN_AND_INTERFACE = Path(__file__).resolve().parent.parent.joinpath("Input/VLAN/VLAN_interfaces.yaml")
+BASE_DIR = Path(__file__).resolve().parent.parent
+INVENTORY_VALIDATOR = BASE_DIR / "Ansible/Inventory/Inventory.yaml"
+INVENTORY_VLAN = BASE_DIR / "Input/VLAN/VLANs.yaml"
+INVENTORY_VLAN_AND_INTERFACE = BASE_DIR / "Input/VLAN/VLAN_interfaces.yaml"
+PLAYBOOK_FILE = BASE_DIR / "Ansible/Playbook/VLAN.yaml"
 def get_device_list_from_INVENTORY():
     router_list=[]
     Inventory_details=subprocess.run(
@@ -57,28 +59,6 @@ def Required_device_details():
         # pprint(device_VLAN_and_interface_detail) # vlans and the respective interfaces that are configured in it.
         return device_interfaces, device_VLAN_and_interface_detail
         
-
-
-def vlan_exist(device_VLAN_and_interface_detail):
-    VLAN_YAML_Contents=load_yaml(INVENTORY_VLAN)
-    # pprint(VLAN_YAML_Contents)
-    existing_VLAN=[]
-    for router in VLAN_YAML_Contents['VLANS'].values():
-        for vlan in router:
-                # print(str(vlan['id']))
-                if str(vlan['id']) in list(VLAN_YAML_Contents['VLANS'].values())[0]:
-                    
-                    existing_VLAN.append(vlan)
-                    continue
-                else: 
-                    print(f"{vlan['id']} is not yet created")
-                    print(f"{vlan['id']} is getting skipped without being exceuted....")
-    print(existing_VLAN)
-   
-    # print(VLAN_YAML_Contents['VLANS'].keys())
-    
-    
-
 
 
 def main():

@@ -1,0 +1,29 @@
+VLANS:
+  R1:
+    - id: 10
+      name: Devops
+    - id: 20
+      name: Security
+    - id: 30
+      name: Netops
+    - id: 30
+      name: Netgear
+    - id: 40
+      name: Technician
+    - id: 40
+      name: Tech
+    - id: 50
+      name: Tech
+    - id: 60
+      name: devops
+  R2:
+    - id: 10
+      name: Devops
+    - id: 10
+      name: Management
+    - id: 20
+      name: Security
+    - id: 30
+      name: Netops
+    - id: 40
+      name: Tech

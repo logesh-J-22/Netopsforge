@@ -1,6 +1,11 @@
 from pathlib import Path
-from temp_file import All_devices_VLAN_details, All_devices_Interface_Summary, All_device_trunking_Interfaces
-from validator import INVENTORY_VLAN,INVENTORY_VLAN_AND_INTERFACE
+from device_state_parser import (
+    to_device_map,
+    All_devices_VLAN_details,
+    All_devices_Interface_Summary,
+    All_device_trunking_Interfaces,
+)
+from validator import INVENTORY_VLAN, INVENTORY_VLAN_AND_INTERFACE
 from pprint import pprint
 from orchestrator import load_yaml
 from dataclasses import dataclass,field
@@ -45,90 +50,163 @@ class ValidationReport:
             }
             for issue in self.issues
         )
-def duplicate_VLAN_ID_check(VLAN_YAML_Contents,Report) -> ValidationReport:
+
+
+def find_duplicates(items: list) -> dict:
+    """Return a dictionary of {item: count} for items appearing more than once."""
+    return {item: count for item, count in Counter(items).items() if count > 1}
+
+
+def duplicate_VLAN_ID_check(VLAN_YAML_Contents, Report) -> ValidationReport:
+    """
+    Check for duplicate VLAN IDs declared under the same device in the inventory YAML.
+
+    Here's the thought process behind this validation:
+    1. Every VLAN configured on a switch must have a unique numeric ID (1-4094).
+       If an inventory file defines the same VLAN ID multiple times under the same device
+       (for example, VLAN 10 assigned to 'HR' and also VLAN 10 assigned to 'Marketing'),
+       this represents a syntax conflict and logical error.
+    2. We collect all VLAN IDs defined for each device and check whether their count matches
+       the number of unique IDs.
+    3. If any duplicate IDs exist, we identify how many times they appear and record a
+       Severity.ERROR showing which conflicting names were assigned to that same ID.
+    """
     for device in VLAN_YAML_Contents["VLANS"]:
-        device_Inventory=VLAN_YAML_Contents["VLANS"][device]
-        IDs= [items["id"] for items in device_Inventory]
-        duplicate_removed_IDs=list(set(IDs))
-        if len(IDs) != len(duplicate_removed_IDs):
-            Repeating_VLAN_IDS= {num: count for num, count in Counter(IDs).items() if count>1}
-            for VLAN_ID, count in Repeating_VLAN_IDS.items():
-                VLAN_NAME=[items["name"] for items in device_Inventory if items["id"]==VLAN_ID]
-                VLAN_details=" | ".join(f"VLAN {VLAN_ID} -> {name}" for name in VLAN_NAME)
-                Report.add(ValidationIssue(
-                    severity=Severity.ERROR,
-                    message=f"Duplicate VLAN ID {VLAN_ID} found in device {device}",
-                    device=device,
-                    resource="VLAN",
-                    expected="Unique VLAN ID",
-                    actual=f"Duplicate VLAN ID: {VLAN_details} "
-                ))
-def duplicate_VLAN_NAME_check(VLAN_YAML_Contents,Report) -> ValidationReport:
+        device_Inventory = VLAN_YAML_Contents["VLANS"][device]
+
+        # Step 1: Collect all VLAN IDs declared for this device and identify repeating IDs
+        IDs = [items["id"] for items in device_Inventory if isinstance(items, dict) and "id" in items]
+        Repeating_VLAN_IDS = find_duplicates(IDs)
+
+        # Step 2: For each duplicate ID, gather the conflicting names and record an ERROR
+        for VLAN_ID in Repeating_VLAN_IDS:
+            VLAN_NAME = [items["name"] for items in device_Inventory if items.get("id") == VLAN_ID]
+            VLAN_details = " | ".join(f"VLAN {VLAN_ID} -> {name}" for name in VLAN_NAME)
+            Report.add(ValidationIssue(
+                severity=Severity.ERROR,
+                message=f"Duplicate VLAN ID {VLAN_ID} found in device {device}",
+                device=device,
+                resource="VLAN",
+                expected="Unique VLAN ID",
+                actual=f"Duplicate VLAN ID: {VLAN_details} "
+            ))
+def duplicate_VLAN_NAME_check(VLAN_YAML_Contents, Report) -> ValidationReport:
+    """
+    Check for duplicate VLAN names assigned to different VLAN IDs on the same device.
+
+    Here's the thought process behind this validation:
+    1. On Cisco IOS switches, VLAN names should be unique per switch to avoid operational
+       confusion, automation ambiguity, and configuration overwrite issues.
+    2. Defining two different VLAN IDs with the exact same name (e.g. VLAN 10 = 'Engineering'
+       and VLAN 20 = 'Engineering') in the device's inventory indicates a naming collision
+       or accidental copy-paste error.
+    3. We normalize all VLAN names to lowercase and compare total names against unique names.
+    4. If any duplicate names exist, we log a Severity.ERROR listing all the VLAN IDs that are
+       competing for the same name.
+    """
     for device in VLAN_YAML_Contents["VLANS"]:
-            device_Inventory=VLAN_YAML_Contents["VLANS"][device]
-            Names= [items["name"].lower() for items in device_Inventory]
-            duplicate_removed_Names=list(set(Names))
-            if len(Names) != len(duplicate_removed_Names):
-                Repeating_VLAN_NAMES= {num: count for num, count in Counter(Names).items() if count>1}
-                for VLAN_NAME, count in Repeating_VLAN_NAMES.items():
-                    VLAN_ID=[items["id"] for items in device_Inventory if items["name"].lower()==VLAN_NAME]
-                    VLAN_details=" | ".join(f"VLAN {id} -> {VLAN_NAME}" for id in VLAN_ID)
-                    Report.add(ValidationIssue(
-                        severity=Severity.ERROR,
-                        message=f"Duplicate VLAN Name found in device {device} with name -> {VLAN_NAME}",
-                        device=device,
-                        resource="VLAN",
-                        expected="Unique VLAN Names",
-                        actual=f"Duplicate VLAN Name: {VLAN_details} "
-                    ))
+        device_Inventory = VLAN_YAML_Contents["VLANS"][device]
+
+        # Step 1: Collect normalized (lowercase) names for all VLANs and identify repeating names
+        Names = [items["name"].lower() for items in device_Inventory if isinstance(items, dict) and items.get("name")]
+        Repeating_VLAN_NAMES = find_duplicates(Names)
+
+        # Step 2: For each duplicate name, find all associated VLAN IDs and record an ERROR
+        for VLAN_NAME in Repeating_VLAN_NAMES:
+            VLAN_ID = [items["id"] for items in device_Inventory if items.get("name", "").lower() == VLAN_NAME]
+            VLAN_details = " | ".join(f"VLAN {id} -> {VLAN_NAME}" for id in VLAN_ID)
+            Report.add(ValidationIssue(
+                severity=Severity.ERROR,
+                message=f"Duplicate VLAN Name found in device {device} with name -> {VLAN_NAME}",
+                device=device,
+                resource="VLAN",
+                expected="Unique VLAN Names",
+                actual=f"Duplicate VLAN Name: {VLAN_details} "
+            ))
 
     
-def Access_and_allowed_vlan_exisitence_check(VLAN_YAML_Contents,VLAN_INTERFACE_YAML_Contents,All_devices_VLAN_details,Report):
-        for device in VLAN_YAML_Contents["VLANS"]:
-            access_vlan_list=[]
-            allowed_vlan_list=[]
-            device_vlan=[]
-            device_Inventory=VLAN_YAML_Contents["VLANS"][device]
-            device_VLAN_Inventory_list=[item['id'] for item in device_Inventory]
-            for device_vlan_details in All_devices_VLAN_details:
-                if device in device_vlan_details:
-                    device_vlan=[int(vlan) for vlan in device_vlan_details[device].keys()]
-            for device_name,device_interface_details in VLAN_INTERFACE_YAML_Contents["interfaces"].items():
-                if device == device_name:
-                    for item in device_interface_details:
-                        if 'access_vlan' in item:
-                            access_vlan_list.append(item["access_vlan"])
-                        else:
-                            allowed_vlan_list.append(item["allowed_vlans"])
-            Normalized_allowed_vlan_list=[item for sublist in allowed_vlan_list for item in sublist]
-            Duplicate_removed_Normalized_allowed_vlan_list=list(set(Normalized_allowed_vlan_list))
-            for vlan in Duplicate_removed_Normalized_allowed_vlan_list:
-                if (vlan not in device_VLAN_Inventory_list) and (vlan not in device_vlan):
-                    Report.add(ValidationIssue(
-                                            severity=Severity.ERROR,
-                                            message=f"Interface VLAN must exist in the VLAN inventory/device",
-                                            device=device,
-                                            resource="Interface VLAN",
-                                            expected=f"allowed VLAN {vlan} exist in the device or its present in the inventory ",
-                                            actual=f"allowed VLAN {vlan} neither exist in the device nor added in the inventory to create it"
-                                        ))
-            for vlan in access_vlan_list:
-                if (vlan not in device_VLAN_Inventory_list) and (vlan not in device_vlan):
-                    Report.add(ValidationIssue(
-                                                severity=Severity.ERROR,
-                                                message=f"Interface VLAN must exist in the VLAN inventory/device",
-                                                device=device,
-                                                resource="Interface VLAN",
-                                                expected=f"access VLAN {vlan} exist in the device or its present in the inventory ",
-                                                actual=f"access VLAN {vlan} neither exist in the device nor added in the inventory to create it"
-                                            ))
+def Access_and_allowed_vlan_exisitence_check(VLAN_YAML_Contents, VLAN_INTERFACE_YAML_Contents, All_devices_VLAN_details, Report):
+    """
+    Ensure every access VLAN and trunk allowed VLAN assigned to an interface exists on the switch or in inventory.
+
+    Here's the thought process behind this validation:
+    1. When an interface is configured as an access port (`switchport access vlan X`) or trunk port
+       (`switchport trunk allowed vlan ...`), the specified VLANs must actually exist.
+    2. If an engineer binds an interface to a VLAN that does not exist on the switch and is not
+       scheduled to be created in `VLANs.yaml`, packets for that VLAN cannot be forwarded and traffic
+       will be blackholed.
+    3. We collect all access VLANs and trunk allowed VLANs assigned across all interfaces on each device.
+    4. For every referenced VLAN, we verify it is either already active on the device hardware or
+       present in the VLAN inventory for creation.
+    5. If a VLAN is neither on the switch nor in the inventory, we raise a blocking Severity.ERROR.
+    """
+    vlan_details_map = to_device_map(All_devices_VLAN_details)
+
+    for device in VLAN_YAML_Contents["VLANS"]:
+        # Step 1: Collect existing device VLANs and planned inventory VLANs
+        device_Inventory = VLAN_YAML_Contents["VLANS"][device]
+        device_VLAN_Inventory_list = [item['id'] for item in device_Inventory]
+        dev_vlan_info = vlan_details_map.get(device, {})
+        device_vlan = [int(vlan) for vlan in dev_vlan_info.keys() if str(vlan).isdigit()]
+
+        # Step 2: Extract access VLANs and trunk allowed VLANs configured on this device's interfaces
+        access_vlan_list = []
+        allowed_vlan_list = []
+        device_interface_details = VLAN_INTERFACE_YAML_Contents.get("interfaces", {}).get(device, [])
+        for item in device_interface_details:
+            if 'access_vlan' in item:
+                access_vlan_list.append(item["access_vlan"])
+            elif 'allowed_vlans' in item:
+                allowed_vlan_list.append(item["allowed_vlans"])
+
+        Normalized_allowed_vlan_list = [item for sublist in allowed_vlan_list for item in sublist]
+        Duplicate_removed_Normalized_allowed_vlan_list = list(set(Normalized_allowed_vlan_list))
+
+        # Step 3: Validate that all trunk allowed VLANs exist on switch or in inventory
+        for vlan in Duplicate_removed_Normalized_allowed_vlan_list:
+            if (vlan not in device_VLAN_Inventory_list) and (vlan not in device_vlan):
+                Report.add(ValidationIssue(
+                    severity=Severity.ERROR,
+                    message="Interface VLAN must exist in the VLAN inventory/device",
+                    device=device,
+                    resource="Interface VLAN",
+                    expected=f"allowed VLAN {vlan} exist in the device or its present in the inventory ",
+                    actual=f"allowed VLAN {vlan} neither exist in the device nor added in the inventory to create it"
+                ))
+
+        # Step 4: Validate that all access VLANs exist on switch or in inventory
+        for vlan in access_vlan_list:
+            if (vlan not in device_VLAN_Inventory_list) and (vlan not in device_vlan):
+                Report.add(ValidationIssue(
+                    severity=Severity.ERROR,
+                    message="Interface VLAN must exist in the VLAN inventory/device",
+                    device=device,
+                    resource="Interface VLAN",
+                    expected=f"access VLAN {vlan} exist in the device or its present in the inventory ",
+                    actual=f"access VLAN {vlan} neither exist in the device nor added in the inventory to create it"
+                ))
 
 
-def Native_VLAN_check(VLAN_INTERFACE_YAML_Contents,Report):
-    print("Native VLAN check")
-    for device_name,device_interface_details in VLAN_INTERFACE_YAML_Contents["interfaces"].items():
+def Native_VLAN_check(VLAN_INTERFACE_YAML_Contents, Report) -> ValidationReport:
+    """
+    Validate that trunk interfaces use the enterprise standard native VLAN 999.
+
+    Here's the thought process behind this validation:
+    1. By default, Cisco 802.1Q trunks use VLAN 1 as the native (untagged) VLAN.
+       Leaving the native VLAN as 1 is a known security vulnerability (enabling VLAN hopping
+       attacks and mixing untagged control traffic with user data).
+    2. Enterprise security standards mandate that all trunk ports explicitly configure
+       an isolated, non-default native VLAN (VLAN 999).
+    3. We scan every interface in `VLAN_interfaces.yaml` that defines a `native_vlan`.
+    4. If the configured `native_vlan` is anything other than 999, we record a blocking
+       Severity.ERROR indicating the violation and the offending interface.
+    """
+    for device_name, device_interface_details in VLAN_INTERFACE_YAML_Contents["interfaces"].items():
+        # Step 1: Iterate over each interface defined for the device
         for interface in device_interface_details:
+            # Step 2: Check if this interface specifies a native VLAN
             if 'native_vlan' in interface:
+                # Step 3: Enforce security standard that native VLAN must be 999
                 if interface["native_vlan"] != 999:
                     Report.add(ValidationIssue(
                         severity=Severity.ERROR,
@@ -138,38 +216,47 @@ def Native_VLAN_check(VLAN_INTERFACE_YAML_Contents,Report):
                         expected="Native VLAN 999",
                         actual=f"Native VLAN {interface['native_vlan']} on interface {interface.get('name')} is not 999"
                     ))
+    return Report
 
 
 
 
 def VLAN_creation_check(VLAN_YAML_Contents, All_devices_VLAN_details, Report) -> ValidationReport:
+    """
+    Identify which VLANs from the inventory need to be newly provisioned on each device.
+
+    Here's the thought process behind this validation:
+    1. We want to determine which VLANs in `VLANs.yaml` do not currently exist on the physical switch
+       hardware and therefore need to be created (`vlan <id>`, `name <name>`).
+    2. However, we must NOT schedule creation for invalid or conflicting VLANs:
+       - If a VLAN has duplicate IDs or duplicate names within the inventory itself, it has already
+         been flagged as a blocking ERROR; attempting to create it would fail or overwrite configs.
+       - If a VLAN name conflicts with a different VLAN ID already on the switch (Severity.CONFLICT),
+         or has any other blocking error logged in Report, we safely suppress the creation CHANGE.
+    3. For all valid, error-free VLANs that are missing from the switch (`vlan_id not in device_vlan`),
+       we record a Severity.CHANGE to schedule their provisioning.
+    """
+    vlan_details_map = to_device_map(All_devices_VLAN_details)
+
     for device in VLAN_YAML_Contents.get("VLANS", {}):
+        # Step 1: Collect existing VLAN IDs on this device
         device_Inventory = VLAN_YAML_Contents["VLANS"][device]
-        device_vlan = []
+        dev_vlan_info = vlan_details_map.get(device, {})
+        device_vlan = [int(vlan) for vlan in dev_vlan_info.keys() if str(vlan).isdigit()]
 
-        if isinstance(All_devices_VLAN_details, dict):
-            if device in All_devices_VLAN_details:
-                device_vlan = [int(vlan) for vlan in All_devices_VLAN_details[device].keys() if str(vlan).isdigit()]
-        elif isinstance(All_devices_VLAN_details, list):
-            for device_vlan_details in All_devices_VLAN_details:
-                if device in device_vlan_details:
-                    device_vlan = [int(vlan) for vlan in device_vlan_details[device].keys() if str(vlan).isdigit()]
-
-        # Identify duplicate names and duplicate IDs within this device's inventory
-        names_list = [
+        # Step 2: Identify local duplicate names and duplicate IDs within this device's inventory
+        duplicate_names = set(find_duplicates([
             item["name"].strip().lower()
             for item in device_Inventory
             if isinstance(item, dict) and item.get("name")
-        ]
-        duplicate_names = {name for name, count in Counter(names_list).items() if count > 1}
-
-        ids_list = [
+        ]))
+        duplicate_ids = set(find_duplicates([
             item["id"]
             for item in device_Inventory
             if isinstance(item, dict) and item.get("id") is not None
-        ]
-        duplicate_ids = {vid for vid, count in Counter(ids_list).items() if count > 1}
+        ]))
 
+        # Step 3: Check each inventory VLAN and filter out any with duplicate or blocking errors
         seen_vlans = set()
         for item in device_Inventory:
             if isinstance(item, dict):
@@ -185,15 +272,15 @@ def VLAN_creation_check(VLAN_YAML_Contents, All_devices_VLAN_details, Report) ->
 
             clean_name = vlan_name.strip().lower() if vlan_name else ""
 
-            # Check 1: If the VLAN name is duplicated on this device, it is already flagged as an ERROR
+            # Filter A: Skip if VLAN name is duplicated on this device (already flagged as ERROR)
             if clean_name and clean_name in duplicate_names:
                 continue
 
-            # Check 2: If the VLAN ID is duplicated on this device, it is already flagged as an ERROR
+            # Filter B: Skip if VLAN ID is duplicated on this device (already flagged as ERROR)
             if vlan_id in duplicate_ids:
                 continue
 
-            # Check 3: Check if Report already has an ERROR or CONFLICT logged for this VLAN on this device
+            # Filter C: Skip if Report already has an ERROR or CONFLICT logged for this VLAN
             has_blocking_error = any(
                 issue.device == device
                 and issue.severity in {Severity.ERROR, Severity.CONFLICT}
@@ -211,6 +298,7 @@ def VLAN_creation_check(VLAN_YAML_Contents, All_devices_VLAN_details, Report) ->
             if has_blocking_error:
                 continue
 
+            # Step 4: If VLAN does not exist on switch, record a CHANGE to create it
             if vlan_id not in device_vlan:
                 name_str = f" ({vlan_name})" if vlan_name else ""
                 Report.add(ValidationIssue(
@@ -225,24 +313,40 @@ def VLAN_creation_check(VLAN_YAML_Contents, All_devices_VLAN_details, Report) ->
     return Report
 
 
+def get_device_vlan_map(device_vlan_details: dict) -> dict[int, str]:
+    """Extract a clean dictionary of {vlan_id: vlan_name} from device VLAN state."""
+    vlan_map = {}
+    for vlan, details in device_vlan_details.items():
+        if str(vlan).isdigit():
+            name = next(iter(details.keys())) if isinstance(details, dict) else str(details)
+            vlan_map[int(vlan)] = name
+    return vlan_map
+
+
 def VLAN_exist_check(VLAN_YAML_Contents, All_devices_VLAN_details, Report, report_name_mismatch: bool = False) -> ValidationReport:
+    """
+    Check if inventory VLANs already exist on the device and verify if their names match.
+
+    Here's the thought process behind this validation:
+    1. For every VLAN specified in `VLANs.yaml`, we check whether it already exists on the live switch.
+    2. If the VLAN ID is already configured on the switch:
+       - If both the ID and name match exactly between inventory and device, no changes are needed!
+         We log a Severity.OK issue to confirm that this VLAN is in its desired state.
+       - If the VLAN ID exists but has a different name on the switch (e.g. switch has 'SALES' while
+         inventory specifies 'Sales_Dept'), this is an informational/name drift. When
+         `report_name_mismatch` is enabled, we record a Severity.CHANGE to prompt a name update.
+    3. If the VLAN ID does not exist on the switch at all, we do nothing here (that creation check
+       is handled separately by `VLAN_creation_check`).
+    """
+    vlan_details_map = to_device_map(All_devices_VLAN_details)
+
     for device in VLAN_YAML_Contents.get("VLANS", {}):
         device_Inventory = VLAN_YAML_Contents["VLANS"][device]
-        device_vlan_map = {}
 
-        if isinstance(All_devices_VLAN_details, dict):
-            if device in All_devices_VLAN_details:
-                for vlan, details in All_devices_VLAN_details[device].items():
-                    if str(vlan).isdigit():
-                        vlan_name = next(iter(details.keys())) if isinstance(details, dict) else str(details)
-                        device_vlan_map[int(vlan)] = vlan_name
-        elif isinstance(All_devices_VLAN_details, list):
-            for device_vlan_details in All_devices_VLAN_details:
-                if device in device_vlan_details:
-                    for vlan, details in device_vlan_details[device].items():
-                        if str(vlan).isdigit():
-                            vlan_name = next(iter(details.keys())) if isinstance(details, dict) else str(details)
-                            device_vlan_map[int(vlan)] = vlan_name
+        # Step 1: Build a map of existing VLAN IDs to names on this device
+        device_vlan_map = get_device_vlan_map(vlan_details_map.get(device, {}))
+
+        # Step 2: Check each inventory VLAN against the device's existing VLANs
         seen_vlans = set()
         for item in device_Inventory:
             if isinstance(item, dict):
@@ -256,6 +360,7 @@ def VLAN_exist_check(VLAN_YAML_Contents, All_devices_VLAN_details, Report, repor
                 continue
             seen_vlans.add(vlan_id)
 
+            # Step 3: If VLAN exists on switch, compare names
             if vlan_id in device_vlan_map:
                 dev_vlan_name = device_vlan_map[vlan_id]
                 name_matches = False
@@ -264,6 +369,7 @@ def VLAN_exist_check(VLAN_YAML_Contents, All_devices_VLAN_details, Report, repor
                 elif not inv_vlan_name and not dev_vlan_name:
                     name_matches = True
 
+                # Case A: VLAN ID and name already match; no action needed
                 if name_matches:
                     name_str = f" ({inv_vlan_name})" if inv_vlan_name else ""
                     Report.add(ValidationIssue(
@@ -274,6 +380,7 @@ def VLAN_exist_check(VLAN_YAML_Contents, All_devices_VLAN_details, Report, repor
                         expected=f"VLAN {vlan_id}{name_str} exists on device {device}",
                         actual=f"VLAN {vlan_id}{name_str} is present on device {device}"
                     ))
+                # Case B: VLAN ID exists but has a different name on switch
                 elif report_name_mismatch:
                     Report.add(ValidationIssue(
                         severity=Severity.CHANGE,
@@ -288,29 +395,34 @@ def VLAN_exist_check(VLAN_YAML_Contents, All_devices_VLAN_details, Report, repor
 
 
 def VLAN_name_conflict_check(VLAN_YAML_Contents, All_devices_VLAN_details, Report) -> ValidationReport:
+    """
+    Check if a proposed VLAN name in the inventory already belongs to a different VLAN on the switch.
+
+    Here's the thought process behind this validation:
+    1. On Cisco IOS switches, assigning a name that is already used by an existing VLAN
+       causes naming ambiguity, monitoring confusion, or command failures.
+    2. For instance, if the switch already has VLAN 20 named 'VOICE', and the inventory proposes
+       creating VLAN 30 with the name 'VOICE', this is a naming conflict between two different VLAN IDs.
+    3. We invert the device's current VLAN map to build a lookup from lowercase names to their VLAN IDs.
+    4. For every VLAN in `VLANs.yaml`, we check whether its desired name is already owned by any
+       *different* VLAN ID on that device.
+    5. If a collision is found, we log a Severity.CONFLICT alerting the engineer to rename one of the VLANs.
+    """
+    vlan_details_map = to_device_map(All_devices_VLAN_details)
+
     for device in VLAN_YAML_Contents.get("VLANS", {}):
         device_Inventory = VLAN_YAML_Contents["VLANS"][device]
-        device_vlan_map = {}
 
-        if isinstance(All_devices_VLAN_details, dict):
-            if device in All_devices_VLAN_details:
-                for vlan, details in All_devices_VLAN_details[device].items():
-                    if str(vlan).isdigit():
-                        vlan_name = next(iter(details.keys())) if isinstance(details, dict) else str(details)
-                        device_vlan_map[int(vlan)] = vlan_name
-        elif isinstance(All_devices_VLAN_details, list):
-            for device_vlan_details in All_devices_VLAN_details:
-                if device in device_vlan_details:
-                    for vlan, details in device_vlan_details[device].items():
-                        if str(vlan).isdigit():
-                            vlan_name = next(iter(details.keys())) if isinstance(details, dict) else str(details)
-                            device_vlan_map[int(vlan)] = vlan_name
+        # Step 1: Collect existing VLAN ID -> Name mappings on the device
+        device_vlan_map = get_device_vlan_map(vlan_details_map.get(device, {}))
 
+        # Step 2: Build an inverted lookup: lowercase VLAN name -> list of existing VLAN IDs
         device_name_to_vlans = {}
         for dev_vlan_id, dev_vlan_name in device_vlan_map.items():
             if dev_vlan_name:
                 device_name_to_vlans.setdefault(dev_vlan_name.strip().lower(), []).append(dev_vlan_id)
 
+        # Step 3: Check each inventory VLAN to see if its name conflicts with a different VLAN ID
         seen_vlans = set()
         for item in device_Inventory:
             if isinstance(item, dict):
@@ -327,6 +439,7 @@ def VLAN_name_conflict_check(VLAN_YAML_Contents, All_devices_VLAN_details, Repor
             clean_name = inv_vlan_name.strip().lower()
             if clean_name in device_name_to_vlans:
                 conflicting_ids = [dev_id for dev_id in device_name_to_vlans[clean_name] if dev_id != vlan_id]
+                # Step 4: If another VLAN ID already owns this name, record a CONFLICT
                 if conflicting_ids:
                     conflicting_str = ", ".join(f"VLAN {dev_id}" for dev_id in conflicting_ids)
                     Report.add(ValidationIssue(
@@ -428,256 +541,103 @@ def interface_has_errors(report: ValidationReport, device: str, interface_name: 
     return False
 
 
-def Trunk_interface_check(
-    VLAN_INTERFACE_YAML_Contents,
-    arg2,
-    arg3=None,
-    arg4=None,
-    arg5=None,
+def format_vlan_names(vlans, lookup: dict[int, str]) -> str:
+    """Format VLAN IDs with human-readable names: e.g. 'VLAN 10 (Devops), VLAN 20 (Security)'."""
+    return ", ".join(f"VLAN {v}" + (f" ({lookup[v]})" if lookup.get(v) else "") for v in sorted(vlans))
+
+
+def get_vlan_name_lookup(device: str, vlan_details_map: dict, vlan_yaml: dict | None = None) -> dict[int, str]:
+    """Build a VLAN ID -> VLAN Name lookup table for a device from switch state and inventory YAML."""
+    lookup = get_device_vlan_map(vlan_details_map.get(device, {}))
+    if vlan_yaml and "VLANS" in vlan_yaml:
+        for item in vlan_yaml["VLANS"].get(device, []):
+            if isinstance(item, dict) and item.get("id") is not None and item.get("name"):
+                lookup[int(item["id"])] = item["name"]
+    return lookup
+
+
+def _evaluate_trunk_port(
+    device: str,
+    interface_name: str,
+    item: dict,
+    trunk_info: dict | None,
+    vlan_name_lookup: dict[int, str],
+    Report: ValidationReport,
     report_ok: bool = False
-) -> ValidationReport:
+):
     """
-    Validate trunk interfaces against current device state and generate configuration commands.
+    Evaluate a single trunk interface against live device state and record CHANGE, ERROR, or OK issues.
 
-    Here's the thought process behind this trunk validation:
-    1. First, we check if there are any blocking ERRORs already recorded for this interface in the Report.
-       For instance, if the interface doesn't physically exist on the switch hardware or has an invalid
-       native VLAN, we skip generating trunk changes — because pushing trunk commands to a non-existent
-       or broken port will only cause deployment failures.
-    2. Once we know the interface is in good standing:
-       - We consult `All_device_trunking_Interfaces` to see if the port is already actively trunking.
-       - If it's already trunking: we check which VLANs are currently allowed (e.g. '20-30') and compute
-         the exact missing delta. If VLANs need to be added, we generate `switchport trunk allowed vlan add <vlans>`
-         so we don't accidentally overwrite or drop existing allowed VLANs.
-       - We also verify whether the native VLAN matches the expected inventory setting (updating it with
-         `switchport trunk native vlan <native_vlan>` if needed).
-       - If the port is not yet trunking: we generate the full setup commands (`switchport mode trunk`,
-         `switchport trunk allowed vlan <vlans>`, and native VLAN) to safely convert it.
-    3. Each planned change is recorded as a CHANGE issue, complete with human-readable VLAN details (ID and name)
-       and the exact list of Cisco CLI commands ready for execution.
+    Here's the thought process behind this evaluation:
+    1. If the port is already actively trunking (802.1Q mode):
+       - Compare current allowed VLANs against desired allowed VLANs to compute missing VLANs.
+       - If missing VLANs exist, record a Severity.CHANGE listing the VLAN IDs and human-readable names.
+       - If the native VLAN differs from desired, record a Severity.CHANGE to update the native VLAN.
+       - If already completely configured and in sync, record Severity.OK (when report_ok is True).
+    2. If the port is not yet trunking (currently in access mode or default state):
+       - Record a Severity.CHANGE noting that the interface will be converted to trunk mode and all
+         desired VLANs will be added.
     """
-    # Flexibility: resolve arguments based on what was passed
-    if arg3 is None and arg4 is None:
-        Report = arg2
-        All_devices_Interface_Summary_data = globals().get("All_devices_Interface_Summary", [])
-        All_device_trunking_Interfaces_data = globals().get("All_device_trunking_Interfaces", [])
-        All_devices_VLAN_details_data = globals().get("All_devices_VLAN_details", [])
-        VLAN_YAML_Contents_data = globals().get("VLAN_YAML_Contents") or load_yaml(INVENTORY_VLAN)
-    elif arg4 is None:
-        if hasattr(arg3, "add") and hasattr(arg3, "issues"):
-            All_devices_Interface_Summary_data = arg2
-            Report = arg3
-            All_device_trunking_Interfaces_data = globals().get("All_device_trunking_Interfaces", [])
-            All_devices_VLAN_details_data = globals().get("All_devices_VLAN_details", [])
-            VLAN_YAML_Contents_data = globals().get("VLAN_YAML_Contents") or load_yaml(INVENTORY_VLAN)
-        else:
-            All_devices_Interface_Summary_data = arg2
-            All_device_trunking_Interfaces_data = arg3
-            Report = ValidationReport()
-            All_devices_VLAN_details_data = globals().get("All_devices_VLAN_details", [])
-            VLAN_YAML_Contents_data = globals().get("VLAN_YAML_Contents") or load_yaml(INVENTORY_VLAN)
-    elif arg5 is None:
-        if hasattr(arg4, "add") and hasattr(arg4, "issues"):
-            All_devices_Interface_Summary_data = arg2
-            All_device_trunking_Interfaces_data = arg3
-            Report = arg4
-            All_devices_VLAN_details_data = globals().get("All_devices_VLAN_details", [])
-            VLAN_YAML_Contents_data = globals().get("VLAN_YAML_Contents") or load_yaml(INVENTORY_VLAN)
-        else:
-            All_devices_Interface_Summary_data = arg2
-            All_device_trunking_Interfaces_data = arg3
-            All_devices_VLAN_details_data = arg4
-            Report = ValidationReport()
-            VLAN_YAML_Contents_data = globals().get("VLAN_YAML_Contents") or load_yaml(INVENTORY_VLAN)
+    expected_vlans = parse_vlan_range(item.get("allowed_vlans"))
+    expected_native = int(item["native_vlan"]) if item.get("native_vlan") is not None else None
+
+    # Case 1: Interface is already operating as an 802.1Q trunk port
+    if trunk_info and trunk_info.get("status") == "trunking":
+        current_allowed = parse_vlan_range(trunk_info.get("vlans_allowed_on_trunk", ""))
+        current_native = int(trunk_info.get("native_vlan", 1))
+        missing_vlans = sorted(expected_vlans - current_allowed)
+        vlans_display = format_vlan_names(missing_vlans, vlan_name_lookup)
+
+        # Delta check: Are any expected VLANs missing from the trunk?
+        if missing_vlans:
+            Report.add(ValidationIssue(
+                severity=Severity.CHANGE,
+                device=device,
+                resource="Trunk Interface",
+                message=f"VLANs {vlans_display} will be added in the trunk interface {interface_name} on device {device}",
+                expected=f"Trunk interface {interface_name} allowing VLANs {format_vlan_list(expected_vlans)}",
+                actual=f"Trunk interface {interface_name} currently allows VLANs {format_vlan_list(current_allowed)}; missing: {vlans_display}"
+            ))
+        # Native VLAN check: Does native VLAN match desired standard?
+        elif expected_native is not None and expected_native != current_native:
+            Report.add(ValidationIssue(
+                severity=Severity.CHANGE,
+                device=device,
+                resource="Trunk Native VLAN",
+                message=f"Native VLAN {expected_native} will be configured on trunk interface {interface_name} on device {device}",
+                expected=f"Native VLAN {expected_native}",
+                actual=f"Native VLAN is currently {current_native}"
+            ))
+        # Already fully matching: Report OK if requested
+        elif report_ok:
+            Report.add(ValidationIssue(
+                severity=Severity.OK,
+                device=device,
+                resource="Trunk Interface",
+                message=f"Trunk interface {interface_name} is already properly configured on device {device}",
+                expected=f"Trunk interface {interface_name} allowing VLANs {format_vlan_list(expected_vlans)}",
+                actual=f"Trunk interface {interface_name} already allows VLANs {format_vlan_list(current_allowed)}"
+            ))
     else:
-        All_devices_Interface_Summary_data = arg2
-        All_device_trunking_Interfaces_data = arg3
-        All_devices_VLAN_details_data = arg4
-        Report = arg5
-        VLAN_YAML_Contents_data = globals().get("VLAN_YAML_Contents") or load_yaml(INVENTORY_VLAN)
-
-    if isinstance(VLAN_INTERFACE_YAML_Contents, (str, Path)):
-        VLAN_INTERFACE_YAML_Contents = load_yaml(VLAN_INTERFACE_YAML_Contents)
-    if isinstance(VLAN_YAML_Contents_data, (str, Path)):
-        VLAN_YAML_Contents_data = load_yaml(VLAN_YAML_Contents_data)
-
-    for device, device_interfaces_details in VLAN_INTERFACE_YAML_Contents.get("interfaces", {}).items():
-        # Step 1: Collect device interface list to verify hardware presence
-        device_interfaces = []
-        if isinstance(All_devices_Interface_Summary_data, dict):
-            if device in All_devices_Interface_Summary_data:
-                device_interfaces = All_devices_Interface_Summary_data[device]
-        elif isinstance(All_devices_Interface_Summary_data, list):
-            for dev_summary in All_devices_Interface_Summary_data:
-                if device in dev_summary:
-                    device_interfaces = dev_summary[device]
-                    break
-        device_interfaces_normalized = {normalize_name(i) for i in device_interfaces}
-
-        # Step 2: Build VLAN ID -> VLAN Name lookup
-        vlan_name_lookup = {}
-        dev_vlan_info = {}
-        if isinstance(All_devices_VLAN_details_data, dict):
-            if device in All_devices_VLAN_details_data:
-                dev_vlan_info = All_devices_VLAN_details_data[device]
-        elif isinstance(All_devices_VLAN_details_data, list):
-            for dev_dict in All_devices_VLAN_details_data:
-                if device in dev_dict:
-                    dev_vlan_info = dev_dict[device]
-                    break
-
-        for vlan_str, vlan_data in dev_vlan_info.items():
-            if str(vlan_str).isdigit():
-                vlan_id = int(vlan_str)
-                if isinstance(vlan_data, dict):
-                    for vname in vlan_data.keys():
-                        vlan_name_lookup[vlan_id] = vname
-
-        # Supplement VLAN names with inventory YAML (for VLANs yet to be created on switch)
-        if VLAN_YAML_Contents_data and "VLANS" in VLAN_YAML_Contents_data:
-            for inv_vlan in VLAN_YAML_Contents_data["VLANS"].get(device, []):
-                if isinstance(inv_vlan, dict):
-                    vid = inv_vlan.get("id")
-                    vname = inv_vlan.get("name")
-                    if vid is not None and vname:
-                        vlan_name_lookup[int(vid)] = vname
-
-        # Step 3: Extract active trunk details for this device from All_device_trunking_Interfaces
-        device_trunks = {}
-        raw_trunk_obj = None
-        if isinstance(All_device_trunking_Interfaces_data, dict):
-            raw_trunk_obj = All_device_trunking_Interfaces_data.get(device)
-        elif isinstance(All_device_trunking_Interfaces_data, list):
-            for dev_entry in All_device_trunking_Interfaces_data:
-                if isinstance(dev_entry, dict) and device in dev_entry:
-                    raw_trunk_obj = dev_entry[device]
-                    break
-
-        if isinstance(raw_trunk_obj, dict):
-            ifaces = raw_trunk_obj.get("interface", {})
-            if isinstance(ifaces, dict):
-                for if_name, if_info in ifaces.items():
-                    if isinstance(if_info, dict):
-                        device_trunks[normalize_name(if_name)] = if_info
-
-        # Step 4: Validate each trunk interface in inventory
-        seen_interfaces = set()
-        for item in device_interfaces_details:
-            if not isinstance(item, dict):
-                continue
-            raw_name = item.get("name")
-            mode = item.get("mode")
-            allowed_vlans_raw = item.get("allowed_vlans")
-            native_vlan = item.get("native_vlan")
-
-            if not raw_name or (mode != "trunk" and not allowed_vlans_raw):
-                continue
-
-            names = [n.strip() for n in str(raw_name).split(",") if n.strip()]
-            for interface_name in names:
-                if interface_name in seen_interfaces:
-                    continue
-                seen_interfaces.add(interface_name)
-
-                norm_name = normalize_name(interface_name)
-
-                # Check A: Does this interface exist on the switch hardware?
-                if norm_name not in device_interfaces_normalized:
-                    # Interface missing error: ensure it's logged in Report if not already recorded
-                    if not interface_has_errors(Report, device, interface_name):
-                        Report.add(ValidationIssue(
-                            severity=Severity.ERROR,
-                            message=f"Interface {interface_name} doesn't exist in the device {device}",
-                            device=device,
-                            resource="Interface",
-                            expected=f"Interface {interface_name} exists on device {device}",
-                            actual=f"Interface {interface_name} doesn't exist in the device {device}"
-                        ))
-                    continue
-
-                # Check B: Are there ANY errors regarding this specific interface in the Report?
-                if interface_has_errors(Report, device, interface_name):
-                    # Skip trunk change because of blocking errors on this port
-                    continue
-
-                # Parse expected allowed VLANs
-                expected_vlans = parse_vlan_range(allowed_vlans_raw)
-                expected_native = int(native_vlan) if native_vlan is not None else None
-
-                # Check C: Check device trunking status
-                trunk_info = device_trunks.get(norm_name)
-                is_currently_trunking = trunk_info is not None and trunk_info.get("status") == "trunking"
-
-                if is_currently_trunking:
-                    current_allowed_str = trunk_info.get("vlans_allowed_on_trunk", "")
-                    current_allowed_vlans = parse_vlan_range(current_allowed_str)
-                    current_native_vlan = int(trunk_info.get("native_vlan", 1))
-
-                    missing_vlans = sorted(expected_vlans - current_allowed_vlans)
-
-                    # Build human-readable VLAN summary (ID and Name)
-                    vlan_details_list = []
-                    for vid in missing_vlans:
-                        vname = vlan_name_lookup.get(vid)
-                        vname_str = f" ({vname})" if vname else ""
-                        vlan_details_list.append(f"VLAN {vid}{vname_str}")
-                    vlans_display = ", ".join(vlan_details_list)
-
-                    if missing_vlans:
-                        Report.add(ValidationIssue(
-                            severity=Severity.CHANGE,
-                            message=f"VLANs {vlans_display} will be added in the trunk interface {interface_name} on device {device}",
-                            device=device,
-                            resource="Trunk Interface",
-                            expected=f"Trunk interface {interface_name} allowing VLANs {format_vlan_list(expected_vlans)}",
-                            actual=f"Trunk interface {interface_name} currently allows VLANs {format_vlan_list(current_allowed_vlans)}; missing: {vlans_display}"
-                        ))
-                    elif expected_native is not None and expected_native != current_native_vlan:
-                        Report.add(ValidationIssue(
-                            severity=Severity.CHANGE,
-                            message=f"Native VLAN {expected_native} will be configured on trunk interface {interface_name} on device {device}",
-                            device=device,
-                            resource="Trunk Native VLAN",
-                            expected=f"Native VLAN {expected_native}",
-                            actual=f"Native VLAN is currently {current_native_vlan}"
-                        ))
-                    elif report_ok:
-                        Report.add(ValidationIssue(
-                            severity=Severity.OK,
-                            message=f"Trunk interface {interface_name} is already properly configured on device {device}",
-                            device=device,
-                            resource="Trunk Interface",
-                            expected=f"Trunk interface {interface_name} allowing VLANs {format_vlan_list(expected_vlans)}",
-                            actual=f"Trunk interface {interface_name} already allows VLANs {format_vlan_list(current_allowed_vlans)}"
-                        ))
-                else:
-                    # Interface exists on device, but is not currently operating as a trunk
-                    vlan_details_list = []
-                    for vid in sorted(expected_vlans):
-                        vname = vlan_name_lookup.get(vid)
-                        vname_str = f" ({vname})" if vname else ""
-                        vlan_details_list.append(f"VLAN {vid}{vname_str}")
-                    vlans_display = ", ".join(vlan_details_list)
-
-                    Report.add(ValidationIssue(
-                        severity=Severity.CHANGE,
-                        message=f"VLANs {vlans_display} will be added in the trunk interface {interface_name} on device {device}",
-                        device=device,
-                        resource="Trunk Interface",
-                        expected=f"Trunk interface {interface_name} allowing {vlans_display}",
-                        actual=f"Interface {interface_name} is not currently operating as a trunk; will be converted to trunk with VLANs {vlans_display}"
-                    ))
-
-    return Report
+        # Case 2: Interface is currently an access port; needs full trunk conversion
+        vlans_display = format_vlan_names(expected_vlans, vlan_name_lookup)
+        Report.add(ValidationIssue(
+            severity=Severity.CHANGE,
+            device=device,
+            resource="Trunk Interface",
+            message=f"VLANs {vlans_display} will be added in the trunk interface {interface_name} on device {device}",
+            expected=f"Trunk interface {interface_name} allowing {vlans_display}",
+            actual=f"Interface {interface_name} is not currently operating as a trunk; will be converted to trunk with VLANs {vlans_display}"
+        ))
 
 
 def Interface_existence_check(
     VLAN_INTERFACE_YAML_Contents,
     All_devices_Interface_Summary,
-    arg3,
-    arg4=None,
-    arg5=None,
-    arg6=None,
+    Report: ValidationReport,
+    All_device_trunking_Interfaces=None,
+    All_devices_VLAN_details=None,
+    VLAN_YAML_Contents=None,
     report_ok: bool = False
 ) -> ValidationReport:
     """
@@ -690,101 +650,39 @@ def Interface_existence_check(
     2. For access interfaces:
        - If it's already sitting on a different VLAN, we raise a WARNING to give the team
          a heads-up that this interface is currently part of another VLAN and will be moved.
-         We also include the CLI command to reassign the VLAN.
        - If it's unassigned (not in any VLAN yet), we log a CHANGE since it's ready to be
-         provisioned into its target access VLAN, along with the full access port commands.
+         provisioned into its target access VLAN.
     3. For trunk interfaces:
        - We first make sure there are no existing blocking ERRORS on this interface (like an invalid
          native VLAN, or the interface not existing).
-       - If everything looks clean and error-free, we inspect `All_device_trunking_Interfaces` to determine
-         which VLANs need to be added, and record a CHANGE noting the VLAN IDs and names, along with the
-         exact Cisco CLI commands to apply.
+       - If clean, we inspect `All_device_trunking_Interfaces` to determine which VLANs need to be added,
+         and record a CHANGE noting the VLAN IDs and names.
     """
-    # Flexibility: support calling with 3, 4, 5, or 6 arguments seamlessly
-    if arg4 is None and arg5 is None and arg6 is None:
-        Report = arg3
-        All_device_trunking_Interfaces_data = globals().get("All_device_trunking_Interfaces", [])
-        All_devices_VLAN_details_data = globals().get("All_devices_VLAN_details", [])
-        VLAN_YAML_Contents_data = globals().get("VLAN_YAML_Contents") or load_yaml(INVENTORY_VLAN)
-    elif arg5 is None and arg6 is None:
-        if hasattr(arg3, "add") and hasattr(arg3, "issues"):
-            Report = arg3
-            All_devices_VLAN_details_data = arg4
-            All_device_trunking_Interfaces_data = globals().get("All_device_trunking_Interfaces", [])
-            VLAN_YAML_Contents_data = globals().get("VLAN_YAML_Contents") or load_yaml(INVENTORY_VLAN)
-        else:
-            All_devices_VLAN_details_data = arg3
-            Report = arg4
-            All_device_trunking_Interfaces_data = globals().get("All_device_trunking_Interfaces", [])
-            VLAN_YAML_Contents_data = globals().get("VLAN_YAML_Contents") or load_yaml(INVENTORY_VLAN)
-    elif arg6 is None:
-        if hasattr(arg4, "add") and hasattr(arg4, "issues"):
-            All_device_trunking_Interfaces_data = arg3
-            Report = arg4
-            All_devices_VLAN_details_data = arg5 if arg5 is not None else globals().get("All_devices_VLAN_details", [])
-            VLAN_YAML_Contents_data = globals().get("VLAN_YAML_Contents") or load_yaml(INVENTORY_VLAN)
-        else:
-            All_devices_VLAN_details_data = arg3
-            VLAN_YAML_Contents_data = arg4
-            Report = arg5
-            All_device_trunking_Interfaces_data = globals().get("All_device_trunking_Interfaces", [])
-    else:
-        All_device_trunking_Interfaces_data = arg3
-        All_devices_VLAN_details_data = arg4
-        VLAN_YAML_Contents_data = arg5
-        Report = arg6
+    All_device_trunking_Interfaces = All_device_trunking_Interfaces or globals().get("All_device_trunking_Interfaces")
+    VLAN_YAML_Contents = VLAN_YAML_Contents or globals().get("VLAN_YAML_Contents")
+    All_devices_VLAN_details = All_devices_VLAN_details or globals().get("All_devices_VLAN_details")
 
-    if isinstance(VLAN_INTERFACE_YAML_Contents, (str, Path)):
-        VLAN_INTERFACE_YAML_Contents = load_yaml(VLAN_INTERFACE_YAML_Contents)
-    if isinstance(VLAN_YAML_Contents_data, (str, Path)):
-        VLAN_YAML_Contents_data = load_yaml(VLAN_YAML_Contents_data)
+    # Step 1: Normalize device summaries, VLAN details, and trunk state tables
+    iface_summary_map = to_device_map(All_devices_Interface_Summary)
+    vlan_details_map = to_device_map(All_devices_VLAN_details)
+    trunk_interfaces_map = to_device_map(All_device_trunking_Interfaces)
 
     for device, device_interfaces_details in VLAN_INTERFACE_YAML_Contents.get("interfaces", {}).items():
-        # Step 1: Collect all interface names present on this device
-        device_interfaces = []
-        if isinstance(All_devices_Interface_Summary, dict):
-            if device in All_devices_Interface_Summary:
-                device_interfaces = All_devices_Interface_Summary[device]
-        elif isinstance(All_devices_Interface_Summary, list):
-            for dev_summary in All_devices_Interface_Summary:
-                if device in dev_summary:
-                    device_interfaces = dev_summary[device]
-                    break
+        # Step 2: Build lookup tables for interface names, VLANs, and trunk states on this device
+        device_interfaces_normalized = {normalize_name(i) for i in iface_summary_map.get(device, [])}
+        vlan_name_lookup = get_vlan_name_lookup(device, vlan_details_map, VLAN_YAML_Contents)
+        raw_trunks = trunk_interfaces_map.get(device, {}).get("interface", {})
+        device_trunks = {normalize_name(k): v for k, v in raw_trunks.items() if isinstance(v, dict)}
 
-        device_interfaces_normalized = {normalize_name(i) for i in device_interfaces}
+        dev_vlan_info = vlan_details_map.get(device, {})
+        device_interface_vlan_map = {
+            normalize_name(iface): int(vlan_str)
+            for vlan_str, vdata in dev_vlan_info.items() if str(vlan_str).isdigit() and isinstance(vdata, dict)
+            for ifaces in vdata.values() if isinstance(ifaces, list)
+            for iface in ifaces
+        }
 
-        # Step 2: Build lookup tables for interface VLANs and VLAN names on this device
-        device_interface_vlan_map = {}
-        vlan_name_lookup = {}
-        dev_vlan_info = {}
-        if isinstance(All_devices_VLAN_details_data, dict):
-            if device in All_devices_VLAN_details_data:
-                dev_vlan_info = All_devices_VLAN_details_data[device]
-        elif isinstance(All_devices_VLAN_details_data, list):
-            for dev_dict in All_devices_VLAN_details_data:
-                if device in dev_dict:
-                    dev_vlan_info = dev_dict[device]
-                    break
-
-        for vlan_str, vlan_data in dev_vlan_info.items():
-            if str(vlan_str).isdigit():
-                vlan_id = int(vlan_str)
-                if isinstance(vlan_data, dict):
-                    for vlan_name, ifaces in vlan_data.items():
-                        vlan_name_lookup[vlan_id] = vlan_name
-                        if isinstance(ifaces, list):
-                            for iface in ifaces:
-                                device_interface_vlan_map[normalize_name(iface)] = vlan_id
-
-        # Supplement VLAN names with inventory YAML (in case VLAN isn't on the box yet)
-        if VLAN_YAML_Contents_data and "VLANS" in VLAN_YAML_Contents_data:
-            for inv_vlan in VLAN_YAML_Contents_data["VLANS"].get(device, []):
-                if isinstance(inv_vlan, dict):
-                    vid = inv_vlan.get("id")
-                    vname = inv_vlan.get("name")
-                    if vid is not None and vname:
-                        vlan_name_lookup[int(vid)] = vname
-
+        # Step 3: Validate each interface in inventory
         seen_interfaces = set()
         for interface in device_interfaces_details:
             if isinstance(interface, dict):
@@ -857,16 +755,39 @@ def Interface_existence_check(
                             actual=f"Interface {interface_name} is in access VLAN {expected_access_vlan}"
                         ))
 
-    # Step 3: Run Trunk interface validation with All_device_trunking_Interfaces and generate commands
-    Trunk_interface_check(
-        VLAN_INTERFACE_YAML_Contents=VLAN_INTERFACE_YAML_Contents,
-        arg2=All_devices_Interface_Summary,
-        arg3=All_device_trunking_Interfaces_data,
-        arg4=Report,
-        report_ok=report_ok
-    )
+                # Check 3: For trunk interfaces, evaluate trunk status and missing allowed VLANs
+                elif (mode == "trunk" or allowed_vlans) and not interface_has_errors(Report, device, interface_name):
+                    _evaluate_trunk_port(
+                        device, interface_name, interface,
+                        device_trunks.get(norm_name),
+                        vlan_name_lookup, Report, report_ok
+                    )
 
     return Report
+
+
+def Trunk_interface_check(
+    VLAN_INTERFACE_YAML_Contents,
+    All_devices_Interface_Summary,
+    All_device_trunking_Interfaces,
+    Report: ValidationReport,
+    All_devices_VLAN_details=None,
+    VLAN_YAML_Contents=None,
+    report_ok: bool = False
+) -> ValidationReport:
+    """
+    Validate trunk interfaces against current device state and determine required trunk updates.
+    (Kept for backward compatibility; interface checks are unified in Interface_existence_check).
+    """
+    return Interface_existence_check(
+        VLAN_INTERFACE_YAML_Contents=VLAN_INTERFACE_YAML_Contents,
+        All_devices_Interface_Summary=All_devices_Interface_Summary,
+        Report=Report,
+        All_device_trunking_Interfaces=All_device_trunking_Interfaces,
+        All_devices_VLAN_details=All_devices_VLAN_details,
+        VLAN_YAML_Contents=VLAN_YAML_Contents,
+        report_ok=report_ok,
+    )
 
 
 def main():

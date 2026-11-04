@@ -16,6 +16,8 @@ VLANS:
       name: Tech
     - id: 60
       name: devops
+    - id: 1004
+      name: Wireless
   R2:
     - id: 10
       name: Devops

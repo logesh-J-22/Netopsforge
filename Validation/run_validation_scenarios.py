@@ -14,7 +14,7 @@ for sp in (Path(__file__).resolve().parent.parent / ".venv/lib").glob("python*/s
     if sp.exists() and str(sp) not in sys.path:
         sys.path.insert(0, str(sp))
 
-from orchestrator import load_yaml
+from orchestrator import load_yaml, validate_yaml_schema
 from VLAN_and_Interface_validation import (
     ValidationReport,
     Severity,
@@ -27,17 +27,18 @@ from VLAN_and_Interface_validation import (
     VLAN_name_conflict_check,
     Interface_existence_check,
 )
-from temp_file import (
+from device_state_parser import (
     All_devices_VLAN_details,
     All_devices_Interface_Summary,
     All_device_trunking_Interfaces,
 )
 
-BASE_DIR = Path(__file__).resolve().parent.parent / "Input/VLAN"
-DEFAULT_VLAN_FILE = BASE_DIR / "VLANs.yaml"
-DEFAULT_IFACE_FILE = BASE_DIR / "VLAN_interfaces.yaml"
-PLAYBOOK_FILE = Path(__file__).resolve().parent.parent / "Ansible/Playbook/VLAN.yaml"
-INVENTORY_FILE = Path(__file__).resolve().parent.parent / "Ansible/Inventory/Inventory.yaml"
+from validator import (
+    INVENTORY_VLAN as DEFAULT_VLAN_FILE,
+    INVENTORY_VLAN_AND_INTERFACE as DEFAULT_IFACE_FILE,
+    INVENTORY_VALIDATOR as INVENTORY_FILE,
+    PLAYBOOK_FILE,
+)
 
 
 def run_validation(vlan_inventory_file: Path, interface_inventory_file: Path, report_ok: bool = True) -> ValidationReport:
@@ -46,6 +47,11 @@ def run_validation(vlan_inventory_file: Path, interface_inventory_file: Path, re
     interface_yaml = load_yaml(interface_inventory_file)
 
     report = ValidationReport()
+
+    # Stage 1: Pydantic Schema, Datatypes & Reserved VLAN Validation
+    validate_yaml_schema(vlan_yaml, interface_yaml, report)
+
+    # Stage 2: Network State & Logic Validation
     duplicate_VLAN_ID_check(vlan_yaml, report)
     duplicate_VLAN_NAME_check(vlan_yaml, report)
     VLAN_name_conflict_check(vlan_yaml, All_devices_VLAN_details, report)
@@ -117,17 +123,20 @@ def main():
         help="Simulate validation and display report without applying changes",
     )
     parser.add_argument(
+        "-v",
         "--vlan-file",
         type=Path,
         default=DEFAULT_VLAN_FILE,
         help=f"Path to VLANs inventory YAML file (default: {DEFAULT_VLAN_FILE})",
     )
     parser.add_argument(
+        "-i",
         "--interface-file",
         type=Path,
         default=DEFAULT_IFACE_FILE,
         help=f"Path to VLAN interfaces inventory YAML file (default: {DEFAULT_IFACE_FILE})",
     )
+    
     args = parser.parse_args()
 
     vlan_file = args.vlan_file
@@ -141,6 +150,7 @@ def main():
 
     # Dry-run mode: report simulation status and exit without running playbook
     if args.dry_run:
+        
         print("\n" + "=" * 80)
         status = "PASSED (NO BLOCKING ISSUES)" if not report.has_blocking_issues else "BLOCKING ISSUES FOUND"
         print(f" [DRY-RUN MODE] Pre-flight simulation completed: {status}")
