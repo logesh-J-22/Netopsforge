@@ -22,10 +22,18 @@
       register: validation_output
       changed_when: false
       check_mode: false
+      failed_when: false
 
-    - name: Pre-Flight Validation - Display validation report summary
+    - name: Pre-Flight Validation - Display validation report
       ansible.builtin.debug:
         msg: "{{ validation_output.stdout_lines }}"
+      run_once: true
+      check_mode: false
+
+    - name: Pre-Flight Validation - Halt on blocking issues
+      ansible.builtin.fail:
+        msg: "Pre-flight validation detected blocking issues (ERROR / CONFLICT). Playbook aborted. Review the report above."
+      when: validation_output.rc != 0
       run_once: true
       check_mode: false
 
