@@ -1,10 +1,38 @@
 - name: Create VLAN's and add interfaces to interfaces
   hosts: ciscoIOS
   gather_facts: false
+  vars:
+    target_vlan_dir: "{{ (vlan_dir | default(playbook_dir ~ '/../../Input/VLAN')) | realpath }}"
+    target_vlan_file: "{{ (vlan_file | default(target_vlan_dir ~ '/VLANs.yaml')) | realpath }}"
+    target_iface_file: "{{ (interface_file | default(target_vlan_dir ~ '/VLAN_interfaces.yaml')) | realpath }}"
+
+  pre_tasks:
+    - name: Pre-Flight Validation - Execute network validation engine
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ (playbook_dir ~ '/../../Validation/orchestrator.py') | realpath }}"
+          - "--dry-run"
+          - "-v"
+          - "{{ target_vlan_file }}"
+          - "-i"
+          - "{{ target_iface_file }}"
+      delegate_to: localhost
+      run_once: true
+      register: validation_output
+      changed_when: false
+      check_mode: false
+
+    - name: Pre-Flight Validation - Display validation report summary
+      ansible.builtin.debug:
+        msg: "{{ validation_output.stdout_lines }}"
+      run_once: true
+      check_mode: false
+
   tasks:
     - name: Include the VLAN variables
       ansible.builtin.include_vars:
-        dir: "{{ vlan_dir | default(playbook_dir ~ '/../../Input/VLAN') }}"
+        dir: "{{ target_vlan_dir }}"
     - name: Create VLAN's
       cisco.ios.ios_vlans:
         config:

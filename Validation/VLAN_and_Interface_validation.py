@@ -7,13 +7,20 @@ from device_state_parser import (
 )
 from validator import INVENTORY_VLAN, INVENTORY_VLAN_AND_INTERFACE
 from pprint import pprint
-from orchestrator import load_yaml
-from dataclasses import dataclass,field
+import yaml
+from dataclasses import dataclass, field
 from enum import Enum
 from collections import Counter
 
-VLAN_YAML_Contents=load_yaml(INVENTORY_VLAN)
-VLAN_INTERFACE_YAML_Contents=load_yaml(INVENTORY_VLAN_AND_INTERFACE)
+
+def load_yaml(path):
+    """Load and parse a YAML file."""
+    with open(path, "r") as f:
+        return yaml.safe_load(f)
+
+
+VLAN_YAML_Contents = load_yaml(INVENTORY_VLAN)
+VLAN_INTERFACE_YAML_Contents = load_yaml(INVENTORY_VLAN_AND_INTERFACE)
 
 
 class Severity(Enum):
