@@ -1,5 +1,44 @@
+- name: Determine Active Switches from Network Intent
+  hosts: localhost
+  gather_facts: false
+  vars:
+    target_vlan_dir: "{{ (vlan_dir | default(playbook_dir ~ '/../../Input/VLAN')) | realpath }}"
+    target_vlan_file: "{{ (vlan_file | default(target_vlan_dir ~ '/VLANs.yaml')) | realpath }}"
+    target_iface_file: "{{ (interface_file | default(target_vlan_dir ~ '/VLAN_interfaces.yaml')) | realpath }}"
+  tasks:
+    - name: Load intent from VLANs file
+      ansible.builtin.set_fact:
+        vlan_raw: "{{ (lookup('file', target_vlan_file) | from_yaml) | default({}, true) }}"
+    - ansible.builtin.set_fact:
+        vlan_devices: "{{ (vlan_raw.VLANS | default({}, true)).keys() | list }}"
+
+    - name: Load intent from Interfaces file
+      ansible.builtin.set_fact:
+        iface_raw: "{{ (lookup('file', target_iface_file) | from_yaml) | default({}, true) }}"
+    - ansible.builtin.set_fact:
+        iface_devices: "{{ (iface_raw.interfaces | default({}, true)).keys() | list }}"
+
+    - name: Calculate unique target devices from both files (OR logic)
+      ansible.builtin.set_fact:
+        declared_devices: "{{ (vlan_devices + iface_devices) | unique }}"
+
+    - name: Filter devices that exist in Ansible inventory (Switches group)
+      ansible.builtin.set_fact:
+        active_target_switches: "{{ declared_devices | intersect(groups['Switches'] | default(groups['ciscoIOS'] | default(groups['all']))) }}"
+
+    - name: Fail if no matching switches were found
+      ansible.builtin.fail:
+        msg: "No switches defined in Input/VLAN files match the inventory 'Switches' group. Declared: {{ declared_devices }}"
+      when: active_target_switches | length == 0
+
+    - name: Dynamically add matching devices to 'active_switches' group
+      ansible.builtin.add_host:
+        name: "{{ item }}"
+        groups: active_switches
+      loop: "{{ active_target_switches }}"
+
 - name: Create VLAN's and add interfaces to interfaces
-  hosts: ciscoIOS
+  hosts: "{{ target_hosts | default('active_switches') }}"
   gather_facts: false
   vars:
     target_vlan_dir: "{{ (vlan_dir | default(playbook_dir ~ '/../../Input/VLAN')) | realpath }}"
@@ -7,6 +46,52 @@
     target_iface_file: "{{ (interface_file | default(target_vlan_dir ~ '/VLAN_interfaces.yaml')) | realpath }}"
 
   pre_tasks:
+    - name: State Discovery - Gather Switch VLAN Information
+      ansible.utils.cli_parse:
+        command: show vlan brief
+        parser:
+          name: ansible.netcommon.ntc_templates
+      register: sw_vlan_output
+      failed_when: false
+
+    - name: State Discovery - Gather Switch Interface Information
+      ansible.utils.cli_parse:
+        command: show ip interface brief
+        parser:
+          name: ansible.netcommon.ntc_templates
+      register: sw_iface_output
+      failed_when: false
+
+    - name: State Discovery - Gather Switch Switchport/Trunk Information
+      ansible.utils.cli_parse:
+        command: show interfaces switchport
+        parser:
+          name: ansible.netcommon.ntc_templates
+      register: sw_switchport_output
+      failed_when: false
+
+    - name: State Discovery - Ensure device_states directory exists on localhost
+      ansible.builtin.file:
+        path: "{{ (playbook_dir ~ '/../../Validation/device_states') | realpath }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true
+
+    - name: State Discovery - Save per-switch live state to JSON artifact
+      ansible.builtin.copy:
+        content: >-
+          {{
+            {
+              "vlans": sw_vlan_output.parsed | default([]),
+              "interfaces": sw_iface_output.parsed | default([]),
+              "switchports": sw_switchport_output.parsed | default([])
+            } | to_nice_json
+          }}
+        dest: "{{ (playbook_dir ~ '/../../Validation/device_states/' ~ inventory_hostname ~ '.json') | realpath }}"
+      delegate_to: localhost
+      when: sw_vlan_output is defined and sw_vlan_output.parsed is defined
+
     - name: Pre-Flight Validation - Execute network validation engine
       ansible.builtin.command:
         argv:
@@ -40,7 +125,12 @@
   tasks:
     - name: Include the VLAN variables
       ansible.builtin.include_vars:
-        dir: "{{ target_vlan_dir }}"
+        file: "{{ target_vlan_file }}"
+
+    - name: Include the Interface variables
+      ansible.builtin.include_vars:
+        file: "{{ target_iface_file }}"
+      when: target_iface_file != target_vlan_file
     - name: Create VLAN's
       cisco.ios.ios_vlans:
         config:
@@ -64,6 +154,7 @@
           - name: "{{ item.name }}"
             mode: "{{ item.mode }}"
             trunk:
+              encapsulation: "{{ item.encapsulation | default('dot1q') }}"
               native_vlan: "{{ item.native_vlan | default(omit) }}"
               allowed_vlans: "{{ item.allowed_vlans | default(omit) }}"
         state: merged

@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import argparse
 import subprocess
+import shutil
 import yaml
 
 # Ensure local imports and virtualenv packages work
@@ -50,6 +51,7 @@ from device_state_parser import (
     All_devices_VLAN_details,
     All_devices_Interface_Summary,
     All_device_trunking_Interfaces,
+    refresh_device_state,
 )
 
 
@@ -118,21 +120,27 @@ def run_validation(vlan_inventory_file: Path, interface_inventory_file: Path, re
 
     report = ValidationReport()
 
+    # Refresh live device states from disk (gathered by Ansible)
+    vlan_details, iface_summary, trunk_interfaces = refresh_device_state()
+
     # Stage 1: Schema & Types
     validate_yaml_schema(vlan_yaml, interface_yaml, report)
 
     # Stage 2: Network State & Business Logic
     duplicate_VLAN_ID_check(vlan_yaml, report)
     duplicate_VLAN_NAME_check(vlan_yaml, report)
-    VLAN_name_conflict_check(vlan_yaml, All_devices_VLAN_details, report)
-    VLAN_creation_check(vlan_yaml, All_devices_VLAN_details, report)
-    VLAN_exist_check(vlan_yaml, All_devices_VLAN_details, report)
+    VLAN_name_conflict_check(vlan_yaml, vlan_details, report)
+    VLAN_creation_check(vlan_yaml, vlan_details, report)
+    VLAN_exist_check(vlan_yaml, vlan_details, report)
     Native_VLAN_check(interface_yaml, report)
-    Access_and_allowed_vlan_exisitence_check(vlan_yaml, interface_yaml, All_devices_VLAN_details, report)
+    Access_and_allowed_vlan_exisitence_check(vlan_yaml, interface_yaml, vlan_details, report)
     Interface_existence_check(
         interface_yaml,
-        All_devices_Interface_Summary,
+        iface_summary,
         report,
+        All_device_trunking_Interfaces=trunk_interfaces,
+        All_devices_VLAN_details=vlan_details,
+        VLAN_YAML_Contents=vlan_yaml,
         report_ok=report_ok,
     )
     return report
@@ -164,15 +172,41 @@ def display_results(title: str, report: ValidationReport):
             print(f"  {idx}. [{item.device}] {item.resource}: {item.message}")
 
 
-def run_playbook(vlan_dir: Path | None = None) -> int:
+def get_ansible_playbook_bin() -> str:
+    """Return the appropriate ansible-playbook binary, preferring the virtual environment."""
+    # 1. Active virtual environment
+    if sys.prefix != sys.base_prefix:
+        venv_ansible = Path(sys.prefix) / "bin" / "ansible-playbook"
+        if venv_ansible.is_file():
+            return str(venv_ansible)
+
+    # 2. Project local .venv
+    local_venv = Path(__file__).resolve().parent.parent / ".venv" / "bin" / "ansible-playbook"
+    if local_venv.is_file():
+        return str(local_venv)
+
+    # 3. Fallback to system PATH
+    return shutil.which("ansible-playbook") or "ansible-playbook"
+
+
+def run_playbook(
+    vlan_dir: Path | None = None,
+    vlan_file: Path | None = None,
+    iface_file: Path | None = None,
+) -> int:
     """Execute the Ansible playbook Ansible/Playbook/VLAN.yaml."""
+    ansible_bin = get_ansible_playbook_bin()
     cmd = [
-        "ansible-playbook",
-        "-i", str(INVENTORY_FILE),
-        str(PLAYBOOK_FILE),
+        ansible_bin,
+        "-i", str(INVENTORY_FILE.resolve()),
+        str(PLAYBOOK_FILE.resolve()),
     ]
     if vlan_dir:
-        cmd.extend(["-e", f"vlan_dir={vlan_dir}"])
+        cmd.extend(["-e", f"vlan_dir={vlan_dir.resolve()}"])
+    if vlan_file:
+        cmd.extend(["-e", f"vlan_file={vlan_file.resolve()}"])
+    if iface_file:
+        cmd.extend(["-e", f"interface_file={iface_file.resolve()}"])
 
     print("\n" + "=" * 80)
     print(" EXECUTING ANSIBLE PLAYBOOK: VLAN.yaml ")
@@ -254,7 +288,11 @@ def main():
     print(" [PASSED] NO BLOCKING ISSUES DETECTED - PROCEEDING WITH PLAYBOOK")
     print("=" * 80)
     print("Applying VLAN and Interface configurations via Ansible playbook: VLAN.yaml...\n")
-    exit_code = run_playbook(vlan_dir=target_dir)
+    exit_code = run_playbook(
+        vlan_dir=target_dir,
+        vlan_file=vlan_file,
+        iface_file=iface_file,
+    )
     sys.exit(exit_code)
 
 

@@ -1,10 +1,16 @@
 all:
   children:
-    cisco:  
+    cisco:
       children:
         ciscoIOS:
-            hosts:
-              R1:
-              R2:
+          children:
+            Routers:
+              hosts:
+                R1:
+               # R2:
+            Switches:
+              hosts:
+                SW1:
+                SW2:
                 
                 

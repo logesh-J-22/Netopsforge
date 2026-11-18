@@ -1,0 +1,38 @@
+{
+  "vlans": [
+    {
+      "vlan_id": "1",
+      "vlan_name": "default",
+      "status": "active",
+      "interfaces": [
+        "Et0/0",
+        "Et0/1",
+        "Et0/2",
+        "Et0/3"
+      ]
+    }
+  ],
+  "interfaces": [
+    {
+      "interface": "Ethernet0/0",
+      "status": "up"
+    },
+    {
+      "interface": "Ethernet0/1",
+      "status": "up"
+    },
+    {
+      "interface": "Ethernet0/2",
+      "status": "up"
+    },
+    {
+      "interface": "Ethernet0/3",
+      "status": "up"
+    },
+    {
+      "interface": "Vlan1",
+      "status": "up"
+    }
+  ],
+  "switchports": []
+}

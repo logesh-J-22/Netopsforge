@@ -1,5 +1,6 @@
-ansible_host: devnetsandboxiosxec9k.cisco.com
-ansible_user: logesh.sjce
-ansible_password: __BydX5vR5p2
-ansible_network_os: ios
+ansible_host: 10.10.20.171
+ansible_user: cisco
+ansible_become_password: cisco
+ansible_password: cisco
+ansible_network_os: cisco.ios.ios
 ansible_connection: network_cli

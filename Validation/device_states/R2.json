@@ -1,0 +1,46 @@
+{
+  "vlans": [
+    {"vlan_id": "1", "vlan_name": "default", "interfaces": ["Gi1/0/2", "Gi1/0/3", "Gi1/0/4"]},
+    {"vlan_id": "10", "vlan_name": "VLAN0010", "interfaces": ["Gi1/0/1"]},
+    {"vlan_id": "1002", "vlan_name": "fddi-default", "interfaces": []},
+    {"vlan_id": "1003", "vlan_name": "token-ring-default", "interfaces": []},
+    {"vlan_id": "1004", "vlan_name": "fddinet-default", "interfaces": []},
+    {"vlan_id": "1005", "vlan_name": "trnet-default", "interfaces": []},
+    {"vlan_id": "201", "vlan_name": "Miser", "interfaces": []},
+    {"vlan_id": "202", "vlan_name": "Black", "interfaces": []},
+    {"vlan_id": "3071", "vlan_name": "R12-P07-MGMT", "interfaces": ["Gi1/0/7"]},
+    {"vlan_id": "3072", "vlan_name": "R12-P07-PROD", "interfaces": ["Gi1/0/5", "Gi1/0/6"]},
+    {"vlan_id": "3073", "vlan_name": "R12-P07-BACKUP", "interfaces": ["Gi1/0/8"]}
+  ],
+  "interfaces": [
+    {"interface": "Vlan1"},
+    {"interface": "Vlan10"},
+    {"interface": "Vlan3071"},
+    {"interface": "Vlan3072"},
+    {"interface": "GigabitEthernet0/0"},
+    {"interface": "GigabitEthernet1/0/1"},
+    {"interface": "GigabitEthernet1/0/2"},
+    {"interface": "GigabitEthernet1/0/3"},
+    {"interface": "GigabitEthernet1/0/4"},
+    {"interface": "GigabitEthernet1/0/5"},
+    {"interface": "GigabitEthernet1/0/6"},
+    {"interface": "GigabitEthernet1/0/7"},
+    {"interface": "GigabitEthernet1/0/8"}
+  ],
+  "switchports": [
+    {
+      "interface": "GigabitEthernet1/0/1",
+      "mode": "trunk",
+      "admin_mode": "trunk",
+      "native_vlan": "1",
+      "trunking_vlans": ["20"]
+    },
+    {
+      "interface": "GigabitEthernet1/0/2",
+      "mode": "trunk",
+      "admin_mode": "trunk",
+      "native_vlan": "1",
+      "trunking_vlans": ["20-30"]
+    }
+  ]
+}

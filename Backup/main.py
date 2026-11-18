@@ -33,7 +33,8 @@ def get_routers(Inventory):
               "hostname": hostname,
               "host": variables["ansible_host"],
               "username": variables.get("ansible_user"),
-              "password": variables.get("ansible_password")
+              "password": variables.get("ansible_password"),
+              "become_pass": variables.get("ansible_become_password")
             }
         )
     return routers
@@ -43,10 +44,12 @@ def backup(router):
     device={"device_type":"cisco_ios",
             "host":router["host"],
             "username":router["username"],
-            "password":router["password"]
+            "password":router["password"],
+            "secret":router["become_pass"]
             }
     device_access=Netmiko(**device)
     print(f"Connected to the {router["hostname"] } successfully ")
+    device_access.enable()
     running_config=device_access.send_command("show running-config")
     timestamp=datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
     router_dir=Backup_dir / router["hostname"]
@@ -90,11 +93,11 @@ def check_and_update(router_dir,current_config):
 
 def main():
     Inventory=get_inventory()
-    pprint(Inventory)
+    #pprint(Inventory)
     routers=get_routers(Inventory)
-    pprint(routers)
-    # for router in routers:
-    #     backup(router)
+    #pprint(routers)
+    for router in routers:
+        backup(router)
 
 if __name__=="__main__":
     main()

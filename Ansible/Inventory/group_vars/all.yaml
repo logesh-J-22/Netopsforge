@@ -1,2 +1,3 @@
 ansible_become: true
 ansible_become_method: enable
+ansible_python_interpreter: /home/logee/Netopsforge/.venv/bin/python3
