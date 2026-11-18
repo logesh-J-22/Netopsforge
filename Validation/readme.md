@@ -48,8 +48,8 @@ The engine runs a two-stage evaluation process before allowing any configuration
 | [`orchestrator.py`](file:///home/logee/Netopsforge/Validation/orchestrator.py) | **Main CLI coordinator.** Loads YAMLs, triggers Stage 1 & 2 validation, prints the formatted report, and either passes control to Ansible or aborts execution. |
 | [`models.py`](file:///home/logee/Netopsforge/Validation/models.py) | **Pydantic models.** Defines `Vlan_structure` and `Vlan_interface_structure` with custom field validators for VLAN ranges and port modes. |
 | [`VLAN_and_Interface_validation.py`](file:///home/logee/Netopsforge/Validation/VLAN_and_Interface_validation.py) | **Business logic checks.** Contains the validation functions that cross-examine input intent against normalized device states. |
-| [`device_state_parser.py`](file:///home/logee/Netopsforge/Validation/device_state_parser.py) | **State normalizer.** Flattens raw device information from live switches or mock files into fast O(1) dictionary maps (`All_devices_VLAN_details`, `All_devices_Interface_Summary`). |
-| [`validator.py`](file:///home/logee/Netopsforge/Validation/validator.py) | **Netmiko collector.** Gathers live operational state directly from switches via SSH (`show ip interface brief`, `show vlan brief`) when needed. |
+| [`device_state_parser.py`](file:///home/logee/Netopsforge/Validation/device_state_parser.py) | **State normalizer.** Loads and normalizes live device information gathered by Ansible (`device_states/<hostname>.json`) into structured dictionary maps. |
+| [`device_states/`](file:///home/logee/Netopsforge/Validation/device_states/) | **Live state cache.** Directory holding per-switch operational state artifacts collected over SSH. |
 | [`exception.py`](file:///home/logee/Netopsforge/Validation/exception.py) | **Custom error definitions.** Provides explicit errors like `ReservedVLANError` and `InvalidVLANError`. |
 
 ---
