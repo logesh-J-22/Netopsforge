@@ -27,12 +27,11 @@ def load_yaml(path: Path | str) -> dict:
 from models import Vlan_interface_structure, Vlan_structure
 from pydantic import ValidationError
 
-from validator import (
-    INVENTORY_VLAN as DEFAULT_VLAN_FILE,
-    INVENTORY_VLAN_AND_INTERFACE as DEFAULT_IFACE_FILE,
-    INVENTORY_VALIDATOR as INVENTORY_FILE,
-    PLAYBOOK_FILE,
-)
+BASE_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_VLAN_FILE = BASE_DIR / "Input/VLAN/VLANs.yaml"
+DEFAULT_IFACE_FILE = BASE_DIR / "Input/VLAN/VLAN_interfaces.yaml"
+INVENTORY_FILE = BASE_DIR / "Ansible/Inventory/Inventory.yaml"
+PLAYBOOK_FILE = BASE_DIR / "Ansible/Playbook/VLAN.yaml"
 
 from VLAN_and_Interface_validation import (
     ValidationReport,

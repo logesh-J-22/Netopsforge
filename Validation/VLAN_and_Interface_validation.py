@@ -5,12 +5,15 @@ from device_state_parser import (
     All_devices_Interface_Summary,
     All_device_trunking_Interfaces,
 )
-from validator import INVENTORY_VLAN, INVENTORY_VLAN_AND_INTERFACE
 from pprint import pprint
 import yaml
 from dataclasses import dataclass, field
 from enum import Enum
 from collections import Counter
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+INVENTORY_VLAN = BASE_DIR / "Input/VLAN/VLANs.yaml"
+INVENTORY_VLAN_AND_INTERFACE = BASE_DIR / "Input/VLAN/VLAN_interfaces.yaml"
 
 
 def load_yaml(path):
